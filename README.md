@@ -11,6 +11,8 @@ current laptops ([sedutil#404](https://github.com/Drive-Trust-Alliance/sedutil/i
 
 [Русский](README.ru.md)
 
+![CakesCats PBA in QEMU](docs/screenshot.png)
+
 ## What is different from the DTA 1.20 PBA
 
 | | DTA 1.20 PBA | CakesCats PBA |
