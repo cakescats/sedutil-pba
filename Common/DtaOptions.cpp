@@ -77,6 +77,17 @@ void usage()
 	printf("--setLockingRange <0...n> <RW|RO|LK> <Admin1password> <device> \n");
 	printf("                                Set the status of a Locking Range\n");
 	printf("                                0 = GLobal 1..n  = LRn \n");
+	printf("--setRangeUser <1...n> <rangepassword> <Admin1password> <device> \n");
+	printf("                                Give Locking Range n its own password (User n+1);\n");
+	printf("                                Admin1 can still lock and unlock it\n");
+	printf("--setupPartitionRanges <partition[,partition...]> <rangepassword> <Admin1password> <device> \n");
+	printf("                                Lock the given partitions with one password: each gets a free\n");
+	printf("                                Locking Range (adjacent ones share one) with a NEW KEY,\n");
+	printf("                                so their data is LOST; format them afterwards\n");
+	printf("--removeRangeUser <1...n> <Admin1password> <device> \n");
+	printf("                                Locking Range n opens with Admin1 only again\n");
+	printf("--setLockingRangeUser <1...n> <RW|RO|LK> <rangepassword> <device> \n");
+	printf("                                Set the status of a Locking Range with its own password\n");
 	printf("--enableLockingRange <0...n> <Admin1password> <device> \n");
 	printf("                                Enable a Locking Range\n");
 	printf("                                0 = GLobal 1..n  = LRn \n");
@@ -98,6 +109,12 @@ void usage()
 	printf("                                on GLOBAL RANGE *ONLY* \n");
     printf("--yesIreallywanttoERASEALLmydatausingthePSID <PSID> <device>\n");
     printf("                                revert the device using the PSID *ERASING* *ALL* the data \n");
+    printf("--setLockOnReset <0...n> <powercycle|hwreset> <Admin1password> <device>\n");
+    printf("                                lock range n again on power cycle only, or also on a\n");
+    printf("                                hardware reset (which a warm reboot can be)\n");
+    printf("--stackReset <device>\n");
+    printf("                                close every open session on the drive (TCG STACK_RESET),\n");
+    printf("                                e.g. after NO_SESSIONS_AVAILABLE\n");
     printf("--printDefaultPassword <device>\n");
     printf("                                print MSID \n");
     printf("--printPasswordHash <password> <device>\n");
@@ -354,6 +371,101 @@ uint8_t DtaOptions(int argc, char * argv[], DTA_OPTIONS * opts)
 			TESTARG(LK, lockingstate, OPAL_LOCKINGSTATE::LOCKED)
 			TESTARG(lk, lockingstate, OPAL_LOCKINGSTATE::LOCKED)
 			TESTFAIL("Invalid locking state <ro|rw|lk>")
+			OPTION_IS(password)
+			OPTION_IS(device)
+			END_OPTION
+		BEGIN_OPTION(setLockingRangeUser, 4)
+			TESTARG(1, lockingrange, 1)
+			TESTARG(2, lockingrange, 2)
+			TESTARG(3, lockingrange, 3)
+			TESTARG(4, lockingrange, 4)
+			TESTARG(5, lockingrange, 5)
+			TESTARG(6, lockingrange, 6)
+			TESTARG(7, lockingrange, 7)
+			TESTARG(8, lockingrange, 8)
+			TESTARG(9, lockingrange, 9)
+			TESTARG(10, lockingrange, 10)
+			TESTARG(11, lockingrange, 11)
+			TESTARG(12, lockingrange, 12)
+			TESTARG(13, lockingrange, 13)
+			TESTARG(14, lockingrange, 14)
+			TESTARG(15, lockingrange, 15)
+			TESTFAIL("Invalid Locking Range (1-15)")
+			TESTARG(RW, lockingstate, OPAL_LOCKINGSTATE::READWRITE)
+			TESTARG(rw, lockingstate, OPAL_LOCKINGSTATE::READWRITE)
+			TESTARG(RO, lockingstate, OPAL_LOCKINGSTATE::READONLY)
+			TESTARG(ro, lockingstate, OPAL_LOCKINGSTATE::READONLY)
+			TESTARG(LK, lockingstate, OPAL_LOCKINGSTATE::LOCKED)
+			TESTARG(lk, lockingstate, OPAL_LOCKINGSTATE::LOCKED)
+			TESTFAIL("Invalid locking state <ro|rw|lk>")
+			OPTION_IS(password)
+			OPTION_IS(device)
+			END_OPTION
+		BEGIN_OPTION(setRangeUser, 4)
+			TESTARG(1, lockingrange, 1)
+			TESTARG(2, lockingrange, 2)
+			TESTARG(3, lockingrange, 3)
+			TESTARG(4, lockingrange, 4)
+			TESTARG(5, lockingrange, 5)
+			TESTARG(6, lockingrange, 6)
+			TESTARG(7, lockingrange, 7)
+			TESTARG(8, lockingrange, 8)
+			TESTARG(9, lockingrange, 9)
+			TESTARG(10, lockingrange, 10)
+			TESTARG(11, lockingrange, 11)
+			TESTARG(12, lockingrange, 12)
+			TESTARG(13, lockingrange, 13)
+			TESTARG(14, lockingrange, 14)
+			TESTARG(15, lockingrange, 15)
+			TESTFAIL("Invalid Locking Range (1-15)")
+			OPTION_IS(newpassword)
+			OPTION_IS(password)
+			OPTION_IS(device)
+			END_OPTION
+		BEGIN_OPTION(setupPartitionRanges, 4) OPTION_IS(userid) OPTION_IS(newpassword)
+			OPTION_IS(password) OPTION_IS(device) END_OPTION
+		BEGIN_OPTION(stackReset, 1) OPTION_IS(device) END_OPTION
+		BEGIN_OPTION(setLockOnReset, 4)
+			TESTARG(0, lockingrange, 0)
+			TESTARG(1, lockingrange, 1)
+			TESTARG(2, lockingrange, 2)
+			TESTARG(3, lockingrange, 3)
+			TESTARG(4, lockingrange, 4)
+			TESTARG(5, lockingrange, 5)
+			TESTARG(6, lockingrange, 6)
+			TESTARG(7, lockingrange, 7)
+			TESTARG(8, lockingrange, 8)
+			TESTARG(9, lockingrange, 9)
+			TESTARG(10, lockingrange, 10)
+			TESTARG(11, lockingrange, 11)
+			TESTARG(12, lockingrange, 12)
+			TESTARG(13, lockingrange, 13)
+			TESTARG(14, lockingrange, 14)
+			TESTARG(15, lockingrange, 15)
+			TESTFAIL("Invalid Locking Range (0-15)")
+			TESTARG(powercycle, lockingstate, 0)
+			TESTARG(hwreset, lockingstate, 1)
+			TESTFAIL("Invalid reset <powercycle|hwreset>")
+			OPTION_IS(password)
+			OPTION_IS(device)
+			END_OPTION
+		BEGIN_OPTION(removeRangeUser, 3)
+			TESTARG(1, lockingrange, 1)
+			TESTARG(2, lockingrange, 2)
+			TESTARG(3, lockingrange, 3)
+			TESTARG(4, lockingrange, 4)
+			TESTARG(5, lockingrange, 5)
+			TESTARG(6, lockingrange, 6)
+			TESTARG(7, lockingrange, 7)
+			TESTARG(8, lockingrange, 8)
+			TESTARG(9, lockingrange, 9)
+			TESTARG(10, lockingrange, 10)
+			TESTARG(11, lockingrange, 11)
+			TESTARG(12, lockingrange, 12)
+			TESTARG(13, lockingrange, 13)
+			TESTARG(14, lockingrange, 14)
+			TESTARG(15, lockingrange, 15)
+			TESTFAIL("Invalid Locking Range (1-15)")
 			OPTION_IS(password)
 			OPTION_IS(device)
 			END_OPTION

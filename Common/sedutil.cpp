@@ -17,6 +17,9 @@ You should have received a copy of the GNU General Public License
 along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 
 * C:E********************************************************************** */
+#ifndef _WIN32
+#include <signal.h>
+#endif
 #include <iostream>
 #include "os.h"
 #include "DtaHashPwd.h"
@@ -54,6 +57,11 @@ int main(int argc, char * argv[])
 {
 	DTA_OPTIONS opts;
 	DtaDev *tempDev = NULL, *d = NULL;
+#ifndef _WIN32
+	// "sedutil-cli ... | head" would otherwise kill us with a session still
+	// open, and the drive refuses new ones until it times out
+	signal(SIGPIPE, SIG_IGN);
+#endif
 	if (DtaOptions(argc, argv, &opts)) {
 		return DTAERROR_COMMAND_ERROR;
 	}
@@ -125,6 +133,28 @@ int main(int argc, char * argv[])
 	case sedutiloption::setLockingRange_SUM:
 		LOG(D) << "Setting Locking Range " << (uint16_t)opts.lockingrange << " " << (uint16_t)opts.lockingstate << " in Single User Mode";
 		return d->setLockingRange_SUM(opts.lockingrange, opts.lockingstate, argv[opts.password]);
+		break;
+	case sedutiloption::setRangeUser:
+		LOG(D) << "Giving Locking Range " << (uint16_t)opts.lockingrange << " its own password";
+		return d->setRangeUser(opts.lockingrange, argv[opts.newpassword], argv[opts.password]);
+		break;
+	case sedutiloption::setupPartitionRanges:
+		LOG(D) << "Locking partitions " << argv[opts.userid];
+		return d->setupPartitionRanges(argv[opts.userid], argv[opts.newpassword], argv[opts.password]);
+		break;
+	case sedutiloption::setLockOnReset:
+		return d->setLockOnReset(opts.lockingrange, opts.lockingstate != 0, argv[opts.password]);
+		break;
+	case sedutiloption::stackReset:
+		return d->stackReset();
+		break;
+	case sedutiloption::removeRangeUser:
+		LOG(D) << "Removing the password of Locking Range " << (uint16_t)opts.lockingrange;
+		return d->removeRangeUser(opts.lockingrange, argv[opts.password]);
+		break;
+	case sedutiloption::setLockingRangeUser:
+		LOG(D) << "Setting Locking Range " << (uint16_t)opts.lockingrange << " " << (uint16_t)opts.lockingstate << " with its own password";
+		return d->setLockingRangeUser(opts.lockingrange, opts.lockingstate, argv[opts.password]);
 		break;
 	case sedutiloption::enableLockingRange:
         LOG(D) << "Enabling Locking Range " << (uint16_t) opts.lockingrange;

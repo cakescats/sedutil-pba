@@ -105,6 +105,13 @@ public:
          */
 	 uint8_t setLockingRange_SUM(uint8_t lockingrange, uint8_t lockingstate,
 		 char * password);
+	uint8_t setRangeUser(uint8_t lockingrange, char * userpassword, char * Admin1Password);
+	uint8_t removeRangeUser(uint8_t lockingrange, char * Admin1Password);
+	uint8_t stackReset();
+	uint8_t setLockOnReset(uint8_t lockingrange, bool hardwareReset, char * Admin1Password);
+	uint8_t setupPartitionRanges(char * partitions, char * userpassword, char * Admin1Password);
+	uint8_t setLockingRangeUser(uint8_t lockingrange, uint8_t lockingstate,
+		char * userpassword);
          /** Change the active state of a locking range 
          * @param lockingrange The number of the locking range (0 = global)
          * @param enabled  enable (true) or disable (false) the lockingrange

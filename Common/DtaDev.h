@@ -161,6 +161,29 @@ public:
          */
 	virtual uint8_t setLockingRange_SUM(uint8_t lockingrange, uint8_t lockingstate,
 		char * password) = 0;
+	/** Give locking range n its own password: User(n+1) gets the password
+	 *  and may lock and unlock the range; Admin1 still can too.
+	 * @param lockingrange locking range number, 1..n
+	 * @param userpassword the password for the range
+	 * @param Admin1Password password of the locking administrative authority
+	 */
+	virtual uint8_t setRangeUser(uint8_t lockingrange, char * userpassword, char * Admin1Password) = 0;
+	/** For each partition (adjacent ones share a range) take a free locking
+	 *  range, give it a new key (the data in it is lost), enable locking and
+	 *  give it userpassword, see setRangeUser.
+	 * @param partitions comma separated, e.g. nvme0n1p2,nvme0n1p3
+	 */
+	virtual uint8_t setupPartitionRanges(char * partitions, char * userpassword, char * Admin1Password) = 0;
+	/** TCG STACK_RESET of the ComID: closes every open session, e.g. one
+	 *  left behind by a crashed or killed program. No password needed. */
+	virtual uint8_t stackReset() = 0;
+	/** Which resets lock a range: power cycle, plus hardware reset when hardwareReset */
+	virtual uint8_t setLockOnReset(uint8_t lockingrange, bool hardwareReset, char * Admin1Password) = 0;
+	/** Undo setRangeUser: Admin1 only, User(n+1) disabled */
+	virtual uint8_t removeRangeUser(uint8_t lockingrange, char * Admin1Password) = 0;
+	/** Lock or unlock a range with its own password (User n+1), see setRangeUser */
+	virtual uint8_t setLockingRangeUser(uint8_t lockingrange, uint8_t lockingstate,
+		char * userpassword) = 0;
 	/** Change the active state of a locking range
 	 * @param lockingrange The number of the locking range (0 = global)
 	 * @param enabled  enable (true) or disable (false) the lockingrange

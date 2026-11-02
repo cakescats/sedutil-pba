@@ -75,6 +75,13 @@ uint8NOCODE(setLockingRange,uint8_t lockingrange, uint8_t lockingstate,
 	char * Admin1Password)
 uint8NOCODE(setLockingRange_SUM, uint8_t lockingrange, uint8_t lockingstate,
 	char * password)
+uint8NOCODE(setRangeUser, uint8_t lockingrange, char * userpassword, char * Admin1Password)
+uint8NOCODE(removeRangeUser, uint8_t lockingrange, char * Admin1Password)
+uint8NOCODE(stackReset)
+uint8NOCODE(setLockOnReset, uint8_t lockingrange, bool hardwareReset, char * Admin1Password)
+uint8NOCODE(setupPartitionRanges, char * partitions, char * userpassword, char * Admin1Password)
+uint8NOCODE(setLockingRangeUser, uint8_t lockingrange, uint8_t lockingstate,
+	char * userpassword)
 uint8NOCODE(setupLockingRange,uint8_t lockingrange, uint64_t start,
 	uint64_t length, char * password)
 uint8NOCODE(listLockingRanges, char * password, int16_t rangeid)

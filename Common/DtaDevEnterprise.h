@@ -133,6 +133,14 @@ public:
 	/** dummy code not implemented in the enterprise SSC*/
 	uint8_t setLockingRange_SUM(uint8_t lockingrange, uint8_t lockingstate,
 		char * password);
+	/** dummy code not implemented in the enterprise SSC*/
+	uint8_t setRangeUser(uint8_t lockingrange, char * userpassword, char * Admin1Password);
+	uint8_t removeRangeUser(uint8_t lockingrange, char * Admin1Password);
+	uint8_t stackReset();
+	uint8_t setLockOnReset(uint8_t lockingrange, bool hardwareReset, char * Admin1Password);
+	uint8_t setupPartitionRanges(char * partitions, char * userpassword, char * Admin1Password);
+	uint8_t setLockingRangeUser(uint8_t lockingrange, uint8_t lockingstate,
+		char * userpassword);
 	/** Setup a locking range.  Initialize a locking range, set it's start
 	*  LBA and length, initialize it as unlocked with locking disabled.
 	*  @param lockingrange The Locking Range to be setup

@@ -25,6 +25,13 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #include <iostream>
 #include <fstream>
 #include<iomanip>
+#include <sstream>
+#include <algorithm>
+#ifdef __linux__
+#include <unistd.h>
+#endif
+/** Locking table column with the reset types that lock a range */
+#define OPAL_LOCKONRESET_COLUMN 9
 #include "DtaDevOpal.h"
 #include "DtaHashPwd.h"
 #include "DtaEndianFixup.h"
@@ -209,6 +216,28 @@ DtaDevOpal::lrStatus_t DtaDevOpal::getLockingRange_status(uint8_t lockingrange, 
 	LOG(D1) << "Exiting DtaDevOpal:getLockingRange_status()";
 	return lrStatus;
 }
+/** Locking table column 9: list of reset types that lock the range */
+static vector<uint8_t> lockOnResetFrom(DtaResponse &response)
+{
+	// a Get of RangeStart..LockOnReset puts the list at token 28
+	vector<uint8_t> types;
+	if (response.getTokenCount() < 30 || response.tokenIs(28) != OPAL_TOKEN::STARTLIST) return types;
+	for (uint32_t t = 29; t < response.getTokenCount() && response.tokenIs(t) != OPAL_TOKEN::ENDLIST; t++)
+		types.push_back(response.getUint8(t));
+	return types;
+}
+
+static std::string lockOnResetNames(const vector<uint8_t> &types)
+{
+	static const char *names[] = { "PowerCycle", "HardwareReset", "HotPlug", "Programmatic" };
+	std::string out;
+	for (uint8_t t : types) {
+		if (!out.empty()) out += ",";
+		out += (t < 4) ? names[t] : std::to_string(t);
+	}
+	return out.empty() ? "none" : out;
+}
+
 uint8_t DtaDevOpal::listLockingRanges(char * password, int16_t rangeid)
 {
 	uint8_t lastRC;
@@ -246,7 +275,7 @@ uint8_t DtaDevOpal::listLockingRanges(char * password, int16_t rangeid)
 	uint32_t numRanges = response.getUint32(4) + 1;
 	for (uint32_t i = 0; i < numRanges; i++){
 		if(0 != i) LR[8] = i & 0xff;
-		if ((lastRC = getTable(LR, _OPAL_TOKEN::RANGESTART, _OPAL_TOKEN::WRITELOCKED)) != 0) {
+		if ((lastRC = getTable(LR, _OPAL_TOKEN::RANGESTART, OPAL_LOCKONRESET_COLUMN)) != 0) {
 			delete session;
 			return lastRC;
 		}
@@ -257,6 +286,13 @@ uint8_t DtaDevOpal::listLockingRanges(char * password, int16_t rangeid)
 			" WLKEna =" << (response.getUint8(16) ? " Y " : " N ") <<
 			" RLocked =" << (response.getUint8(20) ? " Y " : " N ") <<
 			" WLocked =" << (response.getUint8(24) ? " Y " : " N ");
+		LOG(I) << "            LockOnReset = " << lockOnResetNames(lockOnResetFrom(response));
+		bool enabled;
+		uint32_t limit, tries;
+		if (i && readRangeUser(i & 0xff, enabled, limit, tries) && enabled) {
+			LOG(I) << "            own password: User" << (i + 1) << ", failed tries " << tries << " of "
+				<< (limit ? std::to_string(limit) : std::string("unlimited")) << " since power on";
+		}
 	}
 	delete session;
 	LOG(D1) << "Exiting DtaDevOpal:listLockingRanges()";
@@ -1018,7 +1054,528 @@ uint8_t DtaDevOpal::setLockingRange_SUM(uint8_t lockingrange, uint8_t lockingsta
 	LOG(D1) << "Exiting DtaDevOpal::setLockingRange_SUM";
 	return 0;
 }
-uint8_t DtaDevOpal::setLockingSPvalue(OPAL_UID table_uid, OPAL_TOKEN name, 
+/** Locking range n belongs to User(n+1), as in the sedutil SUM commands */
+static vector<uint8_t> rangeUserUID(uint8_t lockingrange)
+{
+	vector<uint8_t> uid;
+	uid.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
+	for (int i = 0; i < 7; i++) {
+		uid.push_back(OPALUID[OPAL_UID::OPAL_USER1_UID][i]);
+	}
+	uid.push_back(lockingrange + 1);
+	return uid;
+}
+
+/** UID of the Admins class authority, 00000009 00000002 */
+static vector<uint8_t> adminsUID()
+{
+	vector<uint8_t> uid;
+	uid.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
+	for (int i = 0; i < 7; i++) {
+		uid.push_back(OPALUID[OPAL_UID::OPAL_ANYBODY_UID][i]);
+	}
+	uid.push_back(0x02);
+	return uid;
+}
+
+/** Read Enabled of User(n+1) and TryLimit/Tries of its C_PIN in the open
+ *  Admin1 session. Returns false when the drive does not tell. */
+bool DtaDevOpal::readRangeUser(uint8_t lockingrange, bool &enabled, uint32_t &tryLimit, uint32_t &tries)
+{
+	vector<uint8_t> user = rangeUserUID(lockingrange);
+	enabled = false;
+	tryLimit = tries = 0;
+	if (getTable(user, 0x05, 0x05) || (response.getTokenCount() <= 4)) return false;
+	enabled = (response.getUint8(4) != 0);
+	vector<uint8_t> cpin = user;
+	cpin[4] = 0x0b;
+	if (getTable(cpin, 0x05, 0x06) || (response.getTokenCount() <= 8)) return false;
+	tryLimit = response.getUint32(4);
+	tries = response.getUint32(8);
+	return true;
+}
+
+static vector<uint8_t> halfUID(OPAL_UID which)
+{
+	vector<uint8_t> uid;
+	uid.push_back(OPAL_SHORT_ATOM::BYTESTRING4);
+	for (int i = 0; i < 4; i++) {
+		uid.push_back(OPALUID[which][i]);
+	}
+	return uid;
+}
+
+uint8_t DtaDevOpal::setRangeACE(uint8_t lockingrange, bool write, vector<uint8_t> user)
+{
+	LOG(D1) << "Entering DtaDevOpal::setRangeACE";
+	uint8_t lastRC;
+	vector<uint8_t> ace;
+	ace.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
+	for (int i = 0; i < 8; i++) {
+		ace.push_back(OPALUID[write ? OPAL_UID::OPAL_LOCKINGRANGE_GLOBAL_ACE_WRLOCKED :
+			OPAL_UID::OPAL_LOCKINGRANGE_GLOBAL_ACE_RDLOCKED][i]);
+	}
+	ace[8] = lockingrange;
+	vector<vector<uint8_t>> authorities;
+	authorities.push_back(adminsUID());
+	if (!user.empty()) authorities.push_back(user);
+
+	DtaCommand *set = new DtaCommand();
+	if (NULL == set) {
+		LOG(E) << "Unable to create command object ";
+		return DTAERROR_OBJECT_CREATE_FAILED;
+	}
+	set->reset(OPAL_UID::OPAL_AUTHORITY_TABLE, OPAL_METHOD::SET);
+	set->changeInvokingUid(ace);
+	set->addToken(OPAL_TOKEN::STARTLIST);
+	set->addToken(OPAL_TOKEN::STARTNAME);
+	set->addToken(OPAL_TOKEN::VALUES);
+	set->addToken(OPAL_TOKEN::STARTLIST);
+	set->addToken(OPAL_TOKEN::STARTNAME);
+	set->addToken(OPAL_TOKEN::OPAL_BOOLEAN_EXPR);
+	set->addToken(OPAL_TOKEN::STARTLIST);
+	// postfix: Admins [User OR]
+	for (const vector<uint8_t> &auth : authorities) {
+		set->addToken(OPAL_TOKEN::STARTNAME);
+		set->addToken(halfUID(OPAL_UID::OPAL_HALF_UID_AUTHORITY_OBJ_REF));
+		set->addToken(auth);
+		set->addToken(OPAL_TOKEN::ENDNAME);
+	}
+	if (authorities.size() > 1) {
+		set->addToken(OPAL_TOKEN::STARTNAME);
+		set->addToken(halfUID(OPAL_UID::OPAL_HALF_UID_BOOLEAN_ACE));
+		set->addToken(OPAL_TOKEN::OPAL_TRUE); // 1 = OR
+		set->addToken(OPAL_TOKEN::ENDNAME);
+	}
+	set->addToken(OPAL_TOKEN::ENDLIST);
+	set->addToken(OPAL_TOKEN::ENDNAME);
+	set->addToken(OPAL_TOKEN::ENDLIST);
+	set->addToken(OPAL_TOKEN::ENDNAME);
+	set->addToken(OPAL_TOKEN::ENDLIST);
+	set->complete();
+	lastRC = session->sendCommand(set, response);
+	delete set;
+	LOG(D1) << "Exiting DtaDevOpal::setRangeACE";
+	return lastRC;
+}
+
+uint8_t DtaDevOpal::setRangeUser(uint8_t lockingrange, char * userpassword, char * Admin1Password)
+{
+	LOG(D1) << "Entering DtaDevOpal::setRangeUser";
+	uint8_t lastRC;
+	if (lockingrange < 1) {
+		LOG(E) << "The global range stays with Admin1, use a range from 1";
+		return DTAERROR_UNSUPORTED_LOCKING_RANGE;
+	}
+	vector<uint8_t> user = rangeUserUID(lockingrange);
+	vector<uint8_t> cpin = user;
+	cpin[4] = 0x0b; // C_PIN_UserN is 0000000B 000300nn
+	session = new DtaSession(this);
+	if (NULL == session) {
+		LOG(E) << "Unable to create session object ";
+		return DTAERROR_OBJECT_CREATE_FAILED;
+	}
+	if ((lastRC = session->start(OPAL_UID::OPAL_LOCKINGSP_UID, Admin1Password, OPAL_UID::OPAL_ADMIN1_UID)) != 0) {
+		delete session;
+		return lastRC;
+	}
+	vector<uint8_t> hash;
+	DtaHashPwd(hash, userpassword, this);
+	if ((lastRC = setTable(cpin, OPAL_TOKEN::PIN, hash)) != 0) {
+		LOG(E) << "Unable to set the password of User" << (lockingrange + 1);
+		delete session;
+		return lastRC;
+	}
+	if ((lastRC = setTable(user, (OPAL_TOKEN)0x05, OPAL_TOKEN::OPAL_TRUE)) != 0) {
+		LOG(E) << "Unable to enable User" << (lockingrange + 1);
+		delete session;
+		return lastRC;
+	}
+	for (bool write : { false, true }) {
+		if ((lastRC = setRangeACE(lockingrange, write, user)) != 0) {
+			LOG(E) << "Unable to let User" << (lockingrange + 1) << " lock and unlock range " << (uint16_t)lockingrange;
+			delete session;
+			return lastRC;
+		}
+	}
+	delete session;
+	LOG(I) << "LockingRange" << (uint16_t)lockingrange << " now opens with its own password (User"
+		<< (lockingrange + 1) << ") as well as Admin1";
+	LOG(D1) << "Exiting DtaDevOpal::setRangeUser";
+	return 0;
+}
+
+uint8_t DtaDevOpal::removeRangeUser(uint8_t lockingrange, char * Admin1Password)
+{
+	LOG(D1) << "Entering DtaDevOpal::removeRangeUser";
+	uint8_t lastRC;
+	if (lockingrange < 1) {
+		LOG(E) << "The global range stays with Admin1, use a range from 1";
+		return DTAERROR_UNSUPORTED_LOCKING_RANGE;
+	}
+	session = new DtaSession(this);
+	if (NULL == session) {
+		LOG(E) << "Unable to create session object ";
+		return DTAERROR_OBJECT_CREATE_FAILED;
+	}
+	if ((lastRC = session->start(OPAL_UID::OPAL_LOCKINGSP_UID, Admin1Password, OPAL_UID::OPAL_ADMIN1_UID)) != 0) {
+		delete session;
+		return lastRC;
+	}
+	for (bool write : { false, true }) {
+		if ((lastRC = setRangeACE(lockingrange, write, vector<uint8_t>())) != 0) {
+			LOG(E) << "Unable to reset the ACEs of range " << (uint16_t)lockingrange;
+			delete session;
+			return lastRC;
+		}
+	}
+	if ((lastRC = setTable(rangeUserUID(lockingrange), (OPAL_TOKEN)0x05, OPAL_TOKEN::OPAL_FALSE)) != 0) {
+		LOG(E) << "Unable to disable User" << (lockingrange + 1);
+		delete session;
+		return lastRC;
+	}
+	delete session;
+	LOG(I) << "LockingRange" << (uint16_t)lockingrange << " opens with Admin1 only, User"
+		<< (lockingrange + 1) << " disabled";
+	LOG(D1) << "Exiting DtaDevOpal::removeRangeUser";
+	return 0;
+}
+
+uint8_t DtaDevOpal::setLockingRangeUser(uint8_t lockingrange, uint8_t lockingstate,
+	char * userpassword)
+{
+	LOG(D1) << "Entering DtaDevOpal::setLockingRangeUser";
+	uint8_t lastRC;
+	OPAL_TOKEN readlocked, writelocked;
+	const char *msg;
+	switch (lockingstate) {
+	case OPAL_LOCKINGSTATE::READWRITE:
+		readlocked = writelocked = OPAL_TOKEN::OPAL_FALSE;
+		msg = "RW";
+		break;
+	case OPAL_LOCKINGSTATE::READONLY:
+		readlocked = OPAL_TOKEN::OPAL_FALSE;
+		writelocked = OPAL_TOKEN::OPAL_TRUE;
+		msg = "RO";
+		break;
+	case OPAL_LOCKINGSTATE::LOCKED:
+		readlocked = writelocked = OPAL_TOKEN::OPAL_TRUE;
+		msg = "LK";
+		break;
+	default:
+		LOG(E) << "Invalid locking state for setLockingRangeUser";
+		return DTAERROR_INVALID_PARAMETER;
+	}
+	vector<uint8_t> LR;
+	LR.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
+	for (int i = 0; i < 8; i++) {
+		LR.push_back(OPALUID[OPAL_UID::OPAL_LOCKINGRANGE_GLOBAL][i]);
+	}
+	if (lockingrange != 0) {
+		LR[6] = 0x03;
+		LR[8] = lockingrange;
+	}
+	session = new DtaSession(this);
+	if (NULL == session) {
+		LOG(E) << "Unable to create session object ";
+		return DTAERROR_OBJECT_CREATE_FAILED;
+	}
+	if ((lastRC = session->start(OPAL_UID::OPAL_LOCKINGSP_UID, userpassword, rangeUserUID(lockingrange))) != 0) {
+		LOG(D1) << "User" << (lockingrange + 1) << " session refused";
+		delete session;
+		return lastRC;
+	}
+	// the ACEs from setRangeUser cover these two columns, one Set each
+	if (((lastRC = setTable(LR, OPAL_TOKEN::READLOCKED, readlocked)) != 0) ||
+		((lastRC = setTable(LR, OPAL_TOKEN::WRITELOCKED, writelocked)) != 0)) {
+		LOG(E) << "setLockingRangeUser Failed ";
+		delete session;
+		return lastRC;
+	}
+	delete session;
+	LOG(I) << "LockingRange" << (uint16_t)lockingrange << " set to " << msg << " by User" << (lockingrange + 1);
+	LOG(D1) << "Exiting DtaDevOpal::setLockingRangeUser";
+	return 0;
+}
+
+/** A partition as Linux sees it, in 512 byte sectors */
+struct PartExtent {
+	std::string name;
+	uint64_t start;
+	uint64_t size;
+};
+
+#ifdef __linux__
+static bool readSysU64(const std::string &path, uint64_t &out)
+{
+	std::ifstream f(path);
+	return (f >> out) ? true : false;
+}
+
+/** Look up a partition (nvme0n1p2 or /dev/nvme0n1p2) of drive dev in sysfs */
+static uint8_t partitionExtent(const char *dev, std::string part, PartExtent &ext)
+{
+	if (!part.compare(0, 5, "/dev/")) part = part.substr(5);
+	std::string sys = "/sys/class/block/" + part;
+	uint64_t partno;
+	if (!readSysU64(sys + "/partition", partno)) {
+		LOG(E) << part << " is not a partition";
+		return DTAERROR_INVALID_PARAMETER;
+	}
+	char link[512];
+	ssize_t n = readlink(sys.c_str(), link, sizeof(link) - 1);
+	if (n <= 0) return DTAERROR_INVALID_PARAMETER;
+	link[n] = 0;
+	std::string path(link);
+	path = path.substr(0, path.rfind('/'));
+	std::string parent = path.substr(path.rfind('/') + 1);
+	std::string drive(dev);
+	drive = drive.substr(drive.rfind('/') + 1);
+	// /dev/nvme0 is the controller, its namespaces are nvme0n1, nvme0n2 ...
+	bool ours = (parent == drive) ||
+		(!drive.compare(0, 4, "nvme") && !parent.compare(0, drive.size() + 1, drive + "n"));
+	if (!ours) {
+		LOG(E) << part << " is on " << parent << ", not on " << dev;
+		return DTAERROR_INVALID_PARAMETER;
+	}
+	if (!readSysU64(sys + "/start", ext.start) || !readSysU64(sys + "/size", ext.size)) {
+		LOG(E) << "Unable to read the start and size of " << part;
+		return DTAERROR_INVALID_PARAMETER;
+	}
+	std::ifstream mounts("/proc/mounts"), swaps("/proc/swaps");
+	std::string line, devpath = "/dev/" + part;
+	while (getline(mounts, line) || getline(swaps, line)) {
+		if (!line.compare(0, devpath.size() + 1, devpath + " ")) {
+			LOG(E) << devpath << " is in use (mounted or swap), stop using it first";
+			return DTAERROR_INVALID_PARAMETER;
+		}
+	}
+	ext.name = part;
+	return 0;
+}
+#endif
+
+uint8_t DtaDevOpal::setupPartitionRanges(char * partitions, char * userpassword, char * Admin1Password)
+{
+	LOG(D1) << "Entering DtaDevOpal::setupPartitionRanges";
+#ifndef __linux__
+	LOG(E) << "setupPartitionRanges reads the partitions from sysfs, Linux only";
+	if (!partitions && !userpassword && !Admin1Password) return DTAERROR_INVALID_PARAMETER;
+	return DTAERROR_INVALID_COMMAND;
+#else
+	uint8_t lastRC;
+	std::vector<PartExtent> parts;
+	std::stringstream ss(partitions);
+	std::string item;
+	while (getline(ss, item, ',')) {
+		if (item.empty()) continue;
+		PartExtent ext;
+		if ((lastRC = partitionExtent(dev, item, ext)) != 0) return lastRC;
+		parts.push_back(ext);
+	}
+	if (parts.empty()) {
+		LOG(E) << "No partitions given";
+		return DTAERROR_INVALID_PARAMETER;
+	}
+	std::sort(parts.begin(), parts.end(),
+		[](const PartExtent &a, const PartExtent &b) { return a.start < b.start; });
+
+	// sectors of 512 bytes to logical blocks of the drive
+	uint64_t lbs = disk_info.Geometry_logicalBlockSize ? disk_info.Geometry_logicalBlockSize : 512;
+	uint64_t gran = (disk_info.Geometry_align && disk_info.Geometry_alignmentGranularity) ?
+		disk_info.Geometry_alignmentGranularity : 1;
+	std::vector<PartExtent> extents;
+	for (const PartExtent &p : parts) {
+		if (((p.start * 512) % lbs) || ((p.size * 512) % lbs)) {
+			LOG(E) << p.name << " does not start and end on a " << lbs << " byte block";
+			return DTAERROR_INVALID_PARAMETER;
+		}
+		PartExtent e = p;
+		e.start = p.start * 512 / lbs;
+		e.size = p.size * 512 / lbs;
+		// partitions next to each other share one range
+		if (!extents.empty() && (extents.back().start + extents.back().size == e.start)) {
+			extents.back().size += e.size;
+			extents.back().name += "," + e.name;
+		}
+		else extents.push_back(e);
+	}
+	for (const PartExtent &e : extents) {
+		if (((e.start - disk_info.Geometry_lowestAlignedLBA) % gran) || (e.size % gran)) {
+			LOG(E) << e.name << " is not aligned to the drive's " << gran << " block granularity";
+			return DTAERROR_INVALID_PARAMETER;
+		}
+	}
+
+	std::vector<lrStatus_t> table;
+	if ((lastRC = getLockingRanges(Admin1Password, table)) != 0) {
+		LOG(E) << "Unable to read the locking ranges, is the Admin1 password right?";
+		return lastRC;
+	}
+	std::vector<uint8_t> freeRanges;
+	for (const lrStatus_t &lr : table) {
+		if (!lr.lockingrange_num) continue;
+		if (!lr.size) {
+			freeRanges.push_back(lr.lockingrange_num);
+			continue;
+		}
+		for (const PartExtent &e : extents) {
+			if ((e.start < lr.start + lr.size) && (lr.start < e.start + e.size)) {
+				LOG(E) << e.name << " overlaps LockingRange" << (uint16_t)lr.lockingrange_num
+					<< ", remove that range first";
+				return DTAERROR_INVALID_PARAMETER;
+			}
+		}
+	}
+	if (freeRanges.size() < extents.size()) {
+		LOG(E) << extents.size() << " ranges needed, " << freeRanges.size() << " free";
+		return DTAERROR_INVALID_PARAMETER;
+	}
+	for (size_t i = 0; i < extents.size(); i++) {
+		const PartExtent &e = extents[i];
+		uint8_t lr = freeRanges[i];
+		if (((lastRC = setupLockingRange(lr, e.start, e.size, Admin1Password)) != 0) ||
+			((lastRC = configureLockingRange(lr, DTA_READLOCKINGENABLED | DTA_WRITELOCKINGENABLED,
+				Admin1Password)) != 0) ||
+			// some drives also lock new ranges on a hardware reset, which
+			// is the warm reboot from the PBA into the OS
+			((lastRC = setLockOnReset(lr, false, Admin1Password)) != 0) ||
+			((lastRC = setRangeUser(lr, userpassword, Admin1Password)) != 0)) {
+			LOG(E) << "Setting up LockingRange" << (uint16_t)lr << " for " << e.name << " failed";
+			return lastRC;
+		}
+		LOG(I) << e.name << " -> LockingRange" << (uint16_t)lr << ", blocks " << e.start
+			<< " .. " << (e.start + e.size - 1) << ", new key: format it before use";
+	}
+	LOG(D1) << "Exiting DtaDevOpal::setupPartitionRanges";
+	return 0;
+#endif
+}
+
+uint8_t DtaDevOpal::setLockOnReset(uint8_t lockingrange, bool hardwareReset, char * Admin1Password)
+{
+	LOG(D1) << "Entering DtaDevOpal::setLockOnReset";
+	uint8_t lastRC;
+	vector<uint8_t> LR;
+	LR.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
+	for (int i = 0; i < 8; i++) {
+		LR.push_back(OPALUID[OPAL_UID::OPAL_LOCKINGRANGE_GLOBAL][i]);
+	}
+	if (lockingrange != 0) {
+		LR[6] = 0x03;
+		LR[8] = lockingrange;
+	}
+	session = new DtaSession(this);
+	if (NULL == session) {
+		LOG(E) << "Unable to create session object ";
+		return DTAERROR_OBJECT_CREATE_FAILED;
+	}
+	if ((lastRC = session->start(OPAL_UID::OPAL_LOCKINGSP_UID, Admin1Password, OPAL_UID::OPAL_ADMIN1_UID)) != 0) {
+		delete session;
+		return lastRC;
+	}
+	DtaCommand *set = new DtaCommand();
+	if (NULL == set) {
+		LOG(E) << "Unable to create command object ";
+		delete session;
+		return DTAERROR_OBJECT_CREATE_FAILED;
+	}
+	set->reset(OPAL_UID::OPAL_AUTHORITY_TABLE, OPAL_METHOD::SET);
+	set->changeInvokingUid(LR);
+	set->addToken(OPAL_TOKEN::STARTLIST);
+	set->addToken(OPAL_TOKEN::STARTNAME);
+	set->addToken(OPAL_TOKEN::VALUES);
+	set->addToken(OPAL_TOKEN::STARTLIST);
+	set->addToken(OPAL_TOKEN::STARTNAME);
+	set->addToken((uint64_t)OPAL_LOCKONRESET_COLUMN);
+	set->addToken(OPAL_TOKEN::STARTLIST);
+	set->addToken((uint64_t)0); // PowerCycle
+	if (hardwareReset) set->addToken((uint64_t)1);
+	set->addToken(OPAL_TOKEN::ENDLIST);
+	set->addToken(OPAL_TOKEN::ENDNAME);
+	set->addToken(OPAL_TOKEN::ENDLIST);
+	set->addToken(OPAL_TOKEN::ENDNAME);
+	set->addToken(OPAL_TOKEN::ENDLIST);
+	set->complete();
+	lastRC = session->sendCommand(set, response);
+	delete set;
+	delete session;
+	if (lastRC) {
+		LOG(E) << "setLockOnReset Failed ";
+		return lastRC;
+	}
+	LOG(I) << "LockingRange" << (uint16_t)lockingrange << " locks on "
+		<< (hardwareReset ? "power cycle and hardware reset" : "power cycle only");
+	LOG(D1) << "Exiting DtaDevOpal::setLockOnReset";
+	return 0;
+}
+
+uint8_t DtaDevOpal::getLockingRanges(char * Admin1Password, vector<lrStatus_t> &ranges)
+{
+	LOG(D1) << "Entering DtaDevOpal::getLockingRanges";
+	uint8_t lastRC;
+	ranges.clear();
+	session = new DtaSession(this);
+	if (NULL == session) {
+		LOG(E) << "Unable to create session object ";
+		return DTAERROR_OBJECT_CREATE_FAILED;
+	}
+	if ((lastRC = session->start(OPAL_UID::OPAL_LOCKINGSP_UID, Admin1Password, OPAL_UID::OPAL_ADMIN1_UID)) != 0) {
+		delete session;
+		return lastRC;
+	}
+	vector<uint8_t> table;
+	table.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
+	for (int i = 0; i < 8; i++) {
+		table.push_back(OPALUID[OPAL_UID::OPAL_LOCKING_INFO_TABLE][i]);
+	}
+	if ((lastRC = getTable(table, _OPAL_TOKEN::MAXRANGES, _OPAL_TOKEN::MAXRANGES)) != 0) {
+		delete session;
+		return lastRC;
+	}
+	if (response.tokenIs(4) != _OPAL_TOKEN::DTA_TOKENID_UINT) {
+		delete session;
+		return DTAERROR_NO_LOCKING_INFO;
+	}
+	uint32_t numRanges = response.getUint32(4) + 1;
+	vector<uint8_t> LR;
+	LR.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
+	for (int i = 0; i < 8; i++) {
+		LR.push_back(OPALUID[OPAL_UID::OPAL_LOCKINGRANGE_GLOBAL][i]);
+	}
+	for (uint32_t i = 0; i < numRanges; i++) {
+		if (i) {
+			LR[6] = 0x03;
+			LR[8] = i & 0xff;
+		}
+		if ((lastRC = getTable(LR, _OPAL_TOKEN::RANGESTART, OPAL_LOCKONRESET_COLUMN)) != 0) {
+			delete session;
+			return lastRC;
+		}
+		if (response.getTokenCount() < 24) {
+			delete session;
+			return DTAERROR_NO_LOCKING_INFO;
+		}
+		lrStatus_t lr;
+		lr.command_status = 0;
+		lr.lockingrange_num = i;
+		lr.start = response.getUint64(4);
+		lr.size = response.getUint64(8);
+		lr.RLKEna = (response.getUint8(12) != 0);
+		lr.WLKEna = (response.getUint8(16) != 0);
+		lr.RLocked = (response.getUint8(20) != 0);
+		lr.WLocked = (response.getUint8(24) != 0);
+		lr.lockOnReset = lockOnResetFrom(response);
+		lr.userEnabled = false;
+		lr.tryLimit = lr.tries = 0;
+		if (i) readRangeUser(i & 0xff, lr.userEnabled, lr.tryLimit, lr.tries);
+		ranges.push_back(lr);
+	}
+	delete session;
+	LOG(D1) << "Exiting DtaDevOpal::getLockingRanges";
+	return 0;
+}
+uint8_t DtaDevOpal::setLockingSPvalue(OPAL_UID table_uid, OPAL_TOKEN name,
 	OPAL_TOKEN value,char * password, char * msg)
 {
 	LOG(D1) << "Entering DtaDevOpal::setLockingSPvalue";
@@ -1561,6 +2118,43 @@ uint8_t DtaDevOpal::getTable(vector<uint8_t> table, uint16_t startcol,
 	}
 	delete get;
 	return 0;
+}
+uint8_t DtaDevOpal::stackReset()
+{
+	LOG(D1) << "Entering DtaDevOpal::stackReset";
+	uint8_t lastRC;
+	// TCG Core 3.3.4.7.5 STACK_RESET: protocol 2, ComID, extension, request code 2
+	uint8_t raw[MIN_BUFFER_LENGTH + IO_BUFFER_ALIGNMENT];
+	uint8_t *buf = (uint8_t *)(((uintptr_t)raw + IO_BUFFER_ALIGNMENT) & ~(uintptr_t)(IO_BUFFER_ALIGNMENT - 1));
+	memset(buf, 0, MIN_BUFFER_LENGTH);
+	uint16_t id = comID();
+	buf[0] = id >> 8;
+	buf[1] = id & 0xff;
+	buf[7] = 0x02;
+	if ((lastRC = sendCmd(IF_SEND, 0x02, id, buf, 512)) != 0) {
+		LOG(E) << "STACK_RESET send failed " << (uint16_t)lastRC;
+		return lastRC;
+	}
+	// the response says "pending" until the reset is done
+	for (int i = 0; i < 100; i++) {
+		osmsSleep(25);
+		memset(buf, 0, MIN_BUFFER_LENGTH);
+		if ((lastRC = sendCmd(IF_RECV, 0x02, id, buf, 512)) != 0) {
+			LOG(E) << "STACK_RESET receive failed " << (uint16_t)lastRC;
+			return lastRC;
+		}
+		uint16_t avail = (buf[10] << 8) | buf[11];
+		if (avail < 4) continue;
+		uint32_t status = ((uint32_t)buf[12] << 24) | (buf[13] << 16) | (buf[14] << 8) | buf[15];
+		if (status) {
+			LOG(E) << "STACK_RESET failed, status " << status;
+			return DTAERROR_COMMAND_ERROR;
+		}
+		LOG(I) << "ComID 0x" << std::hex << id << std::dec << " reset, open sessions closed";
+		return 0;
+	}
+	LOG(E) << "STACK_RESET still pending";
+	return DTAERROR_COMMAND_ERROR;
 }
 uint8_t DtaDevOpal::exec(DtaCommand * cmd, DtaResponse & resp, uint8_t protocol)
 {

@@ -856,6 +856,42 @@ uint8_t DtaDevEnterprise::setLockingRange_SUM(uint8_t lockingrange, uint8_t lock
         LOG(D1) << "Exiting DtaDevEnterprise::setLockingRange_SUM()";
 	return DTAERROR_INVALID_PARAMETER;
 }
+uint8_t DtaDevEnterprise::setRangeUser(uint8_t lockingrange, char * userpassword, char * Admin1Password)
+{
+	LOG(E) << "setRangeUser not implemented";
+	if (!userpassword && !Admin1Password) { LOG(E) << "Formal Parameters " << (uint16_t)lockingrange; }
+	return DTAERROR_INVALID_PARAMETER;
+}
+uint8_t DtaDevEnterprise::setupPartitionRanges(char * partitions, char * userpassword, char * Admin1Password)
+{
+	LOG(E) << "setupPartitionRanges not implemented";
+	if (!partitions && !userpassword && !Admin1Password) { LOG(E) << "Formal Parameters"; }
+	return DTAERROR_INVALID_PARAMETER;
+}
+uint8_t DtaDevEnterprise::setLockOnReset(uint8_t lockingrange, bool hardwareReset, char * Admin1Password)
+{
+	LOG(E) << "setLockOnReset not implemented";
+	if (!Admin1Password) { LOG(E) << "Formal Parameters " << (uint16_t)lockingrange << hardwareReset; }
+	return DTAERROR_INVALID_PARAMETER;
+}
+uint8_t DtaDevEnterprise::stackReset()
+{
+	LOG(E) << "stackReset not implemented";
+	return DTAERROR_INVALID_PARAMETER;
+}
+uint8_t DtaDevEnterprise::removeRangeUser(uint8_t lockingrange, char * Admin1Password)
+{
+	LOG(E) << "removeRangeUser not implemented";
+	if (!Admin1Password) { LOG(E) << "Formal Parameters " << (uint16_t)lockingrange; }
+	return DTAERROR_INVALID_PARAMETER;
+}
+uint8_t DtaDevEnterprise::setLockingRangeUser(uint8_t lockingrange, uint8_t lockingstate,
+	char * userpassword)
+{
+	LOG(E) << "setLockingRangeUser not implemented";
+	if (!userpassword) { LOG(E) << "Formal Parameters " << (uint16_t)lockingrange << (uint16_t)lockingstate; }
+	return DTAERROR_INVALID_PARAMETER;
+}
 uint8_t DtaDevEnterprise::enableUser(char * password, char * userid, OPAL_TOKEN status)
 {
 	LOG(D1) << "Entering DtaDevEnterprise::enableUser";

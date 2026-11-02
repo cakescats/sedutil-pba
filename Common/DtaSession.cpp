@@ -19,6 +19,12 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
  * C:E********************************************************************** */
 #include "os.h"
 #include <stdio.h>
+#ifndef _WIN32
+#include <unistd.h>
+#else
+#include <windows.h>
+#define sleep(s) Sleep((s) * 1000)
+#endif
 #include "DtaSession.h"
 #include "DtaOptions.h"
 #include "DtaDev.h"
@@ -140,7 +146,17 @@ DtaSession::start(OPAL_UID SP, char * HostChallenge, vector<uint8_t> SignAuthori
 
     cmd->addToken(OPAL_TOKEN::ENDLIST); // ]  (Close Bracket)
     cmd->complete();
-	if ((lastRC = sendCommand(cmd, response)) != 0) {
+	// some drives (KIOXIA XG8) refuse a new session for a moment after
+	// GenKey; MaxSessions is often 1
+	for (int wait = 0; ; wait++) {
+		lastRC = sendCommand(cmd, response);
+		if ((OPALSTATUSCODE::NO_SESSIONS_AVAILABLE != lastRC) || (wait >= 30)) break;
+		if (!wait) {
+			LOG(I) << "No free session on the drive, waiting up to 30 s";
+		}
+		sleep(1);
+	}
+	if (lastRC != 0) {
 		LOG(E) << "Session start failed rc = " << (int)lastRC;
 		delete cmd;
 		return lastRC;

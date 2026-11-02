@@ -123,6 +123,10 @@ public:
           *  @param userData The UIS or CPIN of the USER
           */
 	uint8_t getAuth4User(char * userid, uint8_t column, std::vector<uint8_t> &userData);
+	/** Set the RdLocked (write false) or WrLocked ACE of a range to Admins,
+	 *  or to Admins OR user when user is not empty. Needs an Admin1 session. */
+	uint8_t setRangeACE(uint8_t lockingrange, bool write, std::vector<uint8_t> user);
+	bool readRangeUser(uint8_t lockingrange, bool &enabled, uint32_t &tryLimit, uint32_t &tries);
         /**  Enable a user in the Locking SP  
          * @param password the password of the Locking SP administrative authority 
          * @param userid Character name of the user to be enabled
@@ -166,6 +170,13 @@ public:
          */
 	uint8_t setLockingRange_SUM(uint8_t lockingrange, uint8_t lockingstate,
 		char * password);
+	uint8_t setRangeUser(uint8_t lockingrange, char * userpassword, char * Admin1Password);
+	uint8_t removeRangeUser(uint8_t lockingrange, char * Admin1Password);
+	uint8_t stackReset();
+	uint8_t setLockOnReset(uint8_t lockingrange, bool hardwareReset, char * Admin1Password);
+	uint8_t setupPartitionRanges(char * partitions, char * userpassword, char * Admin1Password);
+	uint8_t setLockingRangeUser(uint8_t lockingrange, uint8_t lockingstate,
+		char * userpassword);
 	/** Setup a locking range.  Initialize a locking range, set it's start
 	*  LBA and length, initialize it as unlocked with locking disabled.
 	*  @paran lockingrange The Locking Range to be setup
@@ -272,6 +283,7 @@ protected:
 		char * password, char * msg = (char *) "New Value Set");
 
 	uint8_t getDefaultPassword();
+public:
 	typedef struct lrStatus
 	{
 		uint8_t command_status; //return code of locking range query command
@@ -282,11 +294,23 @@ protected:
 		bool WLKEna;
 		bool RLocked;
 		bool WLocked;
+		/** User(n+1) enabled, i.e. the range has its own password (getLockingRanges only) */
+		bool userEnabled;
+		/** reset types that lock the range: 0 power cycle, 1 hardware reset (getLockingRanges only) */
+		std::vector<uint8_t> lockOnReset;
+		/** TryLimit (0 = none) and failed Tries of User(n+1) since power on (getLockingRanges only) */
+		uint32_t tryLimit;
+		uint32_t tries;
 	}lrStatus_t;
 	/** Get info programatically for single locking range
 	 *  @param lockingrange locking range number to check
 	 *  @param password Admin1 Password for TPer
 	 */
 	lrStatus_t getLockingRange_status(uint8_t lockingrange, char * password);
+	/** Every locking range in one Admin1 session
+	 *  @param Admin1Password Admin1 Password for TPer
+	 *  @param ranges filled with range 0 (global) .. MaxRanges
+	 */
+	uint8_t getLockingRanges(char * Admin1Password, std::vector<lrStatus_t> &ranges);
 
 };
