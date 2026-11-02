@@ -23,6 +23,7 @@ SEDUTIL_COMMON_CODE = Common/log.h \
 	Common/pbkdf2/chash.h Common/pbkdf2/hmac.h \
 	Common/pbkdf2/pbkdf2.c Common/pbkdf2/sha1.c \
 	Common/pbkdf2/pbkdf2.h Common/pbkdf2/sha1.h \
+	Common/pbkdf2/sha512.c Common/pbkdf2/sha2.h \
 	Common/pbkdf2/bitops.h Common/pbkdf2/blockwise.h \
 	Common/pbkdf2/handy.h Common/pbkdf2/tassert.h 
 SEDUTIL_LINUX_CODE = \
@@ -39,7 +40,9 @@ CLEANFILES = linux/Version.h
 BUILT_SOURCES = linux/Version.h
 #
 linuxpba_SOURCES = LinuxPBA/LinuxPBA.cpp LinuxPBA/GetPassPhrase.cpp LinuxPBA/UnlockSEDs.cpp \
+	LinuxPBA/PbaConfig.cpp LinuxPBA/PbaScreen.cpp \
 	LinuxPBA/GetPassPhrase.h LinuxPBA/UnlockSEDs.h \
+	LinuxPBA/PbaConfig.h LinuxPBA/PbaScreen.h \
 	$(SEDUTIL_LINUX_CODE) \
 	$(SEDUTIL_COMMON_CODE)
 EXTRA_DIST = linux/GitVersion.sh linux/PSIDRevert_LINUX.txt linux/TestSuite.sh README.md docs/sedutil-cli.8

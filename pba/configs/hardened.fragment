@@ -1,0 +1,5 @@
+# Applied on top of cakes_pba_defconfig by scripts/build.sh --profile hardened:
+# no kernel modules, no network drivers, no service shell
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_CAKES_PBA_PATH)/board/cakes-pba/linux.fragment $(BR2_EXTERNAL_CAKES_PBA_PATH)/board/cakes-pba/linux-hardened.fragment"
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_CAKES_PBA_PATH)/board/cakes-pba/rootfs-overlay $(BR2_EXTERNAL_CAKES_PBA_PATH)/board/cakes-pba/overlay-hardened"
+BR2_ROOTFS_POST_SCRIPT_ARGS="hardened"

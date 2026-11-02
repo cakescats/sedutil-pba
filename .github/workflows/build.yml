@@ -1,0 +1,90 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hash and config tests
+        run: make -C tests/host check
+
+  image:
+    needs: host-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [default, hardened]
+    env:
+      CAKES_WORK: /home/runner/cakes-work
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # git describe for the version
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bc bison build-essential \
+            bzip2 cpio file flex libelf-dev libssl-dev rsync unzip wget xz-utils \
+            qemu-system-x86 ovmf
+
+      - name: Download cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CAKES_WORK }}/dl
+          key: dl-${{ hashFiles('scripts/build.sh', 'pba/configs/*') }}
+          restore-keys: dl-
+
+      - name: Build ${{ matrix.profile }} image
+        run: scripts/build.sh --profile ${{ matrix.profile }}
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Boot test in QEMU
+        run: |
+          img=$(ls dist/cakes-pba-*-${{ matrix.profile }}.img)
+          SHOT_WAIT=60 scripts/qemu-smoke.sh "$img" qemu-smoke
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cakes-pba-${{ matrix.profile }}
+          path: |
+            dist/
+            qemu-smoke/
+          if-no-files-found: ignore
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cakes-pba-*
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "CakesCats PBA $GITHUB_REF_NAME" --notes "See README for how to install." \
+            dist/*.img.gz dist/*.sha256

@@ -21,6 +21,7 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #include "DtaOptions.h"
 #include "DtaLexicon.h"
 #include "Version.h"
+#include "DtaHashPwd.h"
 void usage()
 {
     printf("sedutil v%s Copyright 2014-2017 Bright Plaza Inc. <drivetrust@drivetrust.com>\n", GIT_VERSION);
@@ -31,6 +32,10 @@ void usage()
     printf("-v (optional)                       increase verbosity, one to five v's\n");
     printf("-n (optional)                       no password hashing. Passwords will be sent in clear text!\n");
     printf("-l (optional)                       log style output to stderr only\n");
+    printf("-H <sha1|sha512>[:iterations] (optional)\n");
+    printf("                                    password hash, default sha1:75000 (sedutil 1.x)\n");
+    printf("                                    sha512 defaults to 500000 iterations\n");
+    printf("                                    the SEDUTIL_HASH environment variable sets the same\n");
     printf("actions \n");
     printf("--scan \n");
     printf("                                Scans the devices on the system \n");
@@ -95,6 +100,8 @@ void usage()
     printf("                                revert the device using the PSID *ERASING* *ALL* the data \n");
     printf("--printDefaultPassword <device>\n");
     printf("                                print MSID \n");
+    printf("--printPasswordHash <password> <device>\n");
+    printf("                                print the hash sent to the drive for <password>\n");
     printf("\n");
     printf("Examples \n");
     printf("sedutil-cli --scan \n");
@@ -111,6 +118,16 @@ uint8_t DtaOptions(int argc, char * argv[], DTA_OPTIONS * opts)
 	uint8_t baseOptions = 2; // program and option
     CLog::Level() = CLog::FromInt(loggingLevel);
     RCLog::Level() = RCLog::FromInt(loggingLevel);
+    const char *hashspec = getenv("SEDUTIL_HASH");
+    if (hashspec && *hashspec) {
+        DtaHashAlg alg;
+        unsigned int iter;
+        if (DtaParseHashSpec(hashspec, &alg, &iter)) {
+            LOG(E) << "Invalid SEDUTIL_HASH " << hashspec;
+            return DTAERROR_INVALID_COMMAND;
+        }
+        DtaSetHashConfig(alg, iter);
+    }
     if (2 > argc) {
         usage();
 		return DTAERROR_INVALID_COMMAND;
@@ -135,6 +152,17 @@ uint8_t DtaOptions(int argc, char * argv[], DTA_OPTIONS * opts)
 			opts->no_hash_passwords = true;
 			LOG(D) << "Password hashing is disabled";
                 }
+		else if (!strcmp("-H", argv[i])) {
+			DtaHashAlg alg;
+			unsigned int iter;
+			if ((i + 1 >= argc) || DtaParseHashSpec(argv[i + 1], &alg, &iter)) {
+				LOG(E) << "-H needs sha1 or sha512, optionally followed by :iterations";
+				return DTAERROR_INVALID_COMMAND;
+			}
+			DtaSetHashConfig(alg, iter);
+			baseOptions += 2;
+			i++;
+		}
 		else if (!strcmp("-l", argv[i])) {
 			baseOptions += 1;
 			opts->output_format = sedutilNormal;
@@ -511,6 +539,7 @@ uint8_t DtaOptions(int argc, char * argv[], DTA_OPTIONS * opts)
 			END_OPTION
 		BEGIN_OPTION(objDump, 5) i += 4; OPTION_IS(device) END_OPTION
         BEGIN_OPTION(printDefaultPassword, 1) OPTION_IS(device) END_OPTION
+		BEGIN_OPTION(printPasswordHash, 2) OPTION_IS(password) OPTION_IS(device) END_OPTION
 		BEGIN_OPTION(rawCmd, 7) i += 6; OPTION_IS(device) END_OPTION
 		else {
             LOG(E) << "Invalid command line argument " << argv[i];

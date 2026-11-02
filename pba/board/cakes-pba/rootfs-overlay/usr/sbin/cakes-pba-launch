@@ -1,0 +1,20 @@
+#!/bin/sh
+# Started by init on tty1. linuxpba boots the OS itself (warm reboot once
+# the drives are unlocked). It exits with 2 when the service shell was
+# asked for and allowed by /etc/cakes-pba.conf.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+/usr/sbin/linuxpba 2>>/tmp/pbaerror.log
+rc=$?
+
+if [ "$rc" = 2 ]; then
+	cat /etc/cakes-pba-service.txt
+	# init starts the PBA again when the shell exits
+	exec /bin/sh -l
+fi
+
+echo "linuxpba stopped unexpectedly (exit code $rc), see /tmp/pbaerror.log"
+tail -n 20 /tmp/pbaerror.log
+echo "Rebooting in 30 seconds."
+sleep 30
+exec /sbin/reboot -f

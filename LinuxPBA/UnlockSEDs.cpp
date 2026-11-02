@@ -1,5 +1,6 @@
 /* C:B**************************************************************************
 This software is Copyright 2014-2017 Bright Plaza Inc. <drivetrust@drivetrust.com>
+Copyright 2026 CakesCats
 
 This file is part of sedutil.
 
@@ -16,12 +17,14 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 
-* C:E********************************************************************** */
+ * C:E********************************************************************** */
+
 #include "os.h"
 #include "UnlockSEDs.h"
 #include "DtaDevGeneric.h"
 #include "DtaDevOpal1.h"
 #include "DtaDevOpal2.h"
+#include "DtaLexicon.h"
 
 #include <dirent.h>
 #include <fnmatch.h>
@@ -29,70 +32,142 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 
 using namespace std;
 
-uint8_t UnlockSEDs(char * password) {
-/* Loop through drives */
-    char devref[25];
-    int failed = 0;
-    DtaDev *tempDev;
-    DtaDev *d;
-    DIR *dir;
-    struct dirent *dirent;
-    vector<string> devices;
-     string tempstring;
-    LOG(D4) << "Enter UnlockSEDs";
-    dir = opendir("/dev");
-    if(dir!=NULL)
-    {
-        while((dirent=readdir(dir))!=NULL) {
-            if((!fnmatch("sd[a-z]",dirent->d_name,0)) || 
-                    (!fnmatch("nvme[0-9]",dirent->d_name,0)) ||
-                    (!fnmatch("nvme[0-9][0-9]",dirent->d_name,0))
-                    ) {
-                tempstring = dirent->d_name;
-                devices.push_back(tempstring);
-            }
-        }
-        closedir(dir);
-    }
-    std::sort(devices.begin(),devices.end());
-    printf("\nScanning....\n");
-    for(uint16_t i = 0; i < devices.size(); i++) {
-                snprintf(devref,23,"/dev/%s",devices[i].c_str());
-        tempDev = new DtaDevGeneric(devref);
-        if (!tempDev->isPresent()) {
-            break;
-        }
-        if ((!tempDev->isOpal1()) && (!tempDev->isOpal2())) {
-            printf("Drive %-10s %-40s not OPAL  \n", devref, tempDev->getModelNum());
+static string fixedString(const char *s, size_t len)
+{
+	string r(s, strnlen(s, len));
+	size_t e = r.find_last_not_of(' ');
+	r.erase(string::npos == e ? 0 : e + 1);
+	size_t b = r.find_first_not_of(' ');
+	return string::npos == b ? "" : r.substr(b);
+}
 
-            delete tempDev;
-            continue;
-        }
-        if (tempDev->isOpal2())
-            d = new DtaDevOpal2(devref);
-        else
-            d = new DtaDevOpal1(devref);
-        delete tempDev;
-        d->no_hash_passwords = false;
-        failed = 0;
-        if (d->Locked()) {
-            if (d->MBREnabled()) {
-                if (d->setMBRDone(1, password)) {
-                    failed = 1;
-                }
-            }
-            if (d->setLockingRange(0, OPAL_LOCKINGSTATE::READWRITE, password)) {
-                failed = 1;
-            }
-            failed ? printf("Drive %-10s %-40s is OPAL Failed  \n", devref, d->getModelNum()) :
-                    printf("Drive %-10s %-40s is OPAL Unlocked   \n", devref, d->getModelNum());
-            delete d;
-        }
-        else {
-            printf("Drive %-10s %-40s is OPAL NOT LOCKED   \n", devref, d->getModelNum());
-            delete d;
-        }
+static DtaDev *openOpal(const string &dev, bool opal2)
+{
+	DtaDev *d;
+	if (opal2)
+		d = new DtaDevOpal2(dev.c_str());
+	else
+		d = new DtaDevOpal1(dev.c_str());
+	d->no_hash_passwords = false;
+	return d;
+}
 
-    }
-    return 0x00;
-};
+/** Drive needs a password: data range locked or shadow MBR still shown */
+static bool needsUnlock(DtaDev *d)
+{
+	return d->Locked() || (d->MBREnabled() && !d->MBRDone());
+}
+
+static bool isOpal2(const string &dev)
+{
+	DtaDevGeneric probe(dev.c_str());
+	return probe.isOpal2();
+}
+
+vector<PbaDrive> ScanSEDs()
+{
+	vector<string> devices;
+	DIR *dir = opendir("/dev");
+	if (dir) {
+		struct dirent *dirent;
+		while ((dirent = readdir(dir)) != NULL) {
+			if (!fnmatch("sd[a-z]", dirent->d_name, 0) ||
+				!fnmatch("sd[a-z][a-z]", dirent->d_name, 0) ||
+				!fnmatch("nvme[0-9]", dirent->d_name, 0) ||
+				!fnmatch("nvme[0-9][0-9]", dirent->d_name, 0))
+				devices.push_back(string("/dev/") + dirent->d_name);
+		}
+		closedir(dir);
+	}
+	sort(devices.begin(), devices.end());
+
+	vector<PbaDrive> drives;
+	for (const string &dev : devices) {
+		LOG(D1) << "Probing " << dev;
+		DtaDevGeneric probe(dev.c_str());
+		if (!probe.isPresent()) continue;
+		PbaDrive drive;
+		drive.dev = dev;
+		drive.model = fixedString(probe.getModelNum(), 40);
+		drive.serial = fixedString(probe.getSerialNum(), 20);
+		if (!probe.isOpal1() && !probe.isOpal2()) {
+			drive.state = DRIVE_NOT_OPAL;
+		}
+		else {
+			DtaDev *d = openOpal(dev, probe.isOpal2());
+			drive.state = needsUnlock(d) ? DRIVE_LOCKED : DRIVE_NOT_LOCKED;
+			delete d;
+		}
+		drives.push_back(drive);
+	}
+	return drives;
+}
+
+/** Unlock one drive. Returns 0 on success, otherwise the OPAL status of
+ *  the first failing call. */
+static uint8_t unlockDrive(const string &dev, char *password, bool &authorized)
+{
+	DtaDev *d = openOpal(dev, isOpal2(dev));
+	uint8_t rc = 0;
+	authorized = false;
+	if (d->Locked()) {
+		rc = d->setLockingRange(0, OPAL_LOCKINGSTATE::READWRITE, password);
+		if (rc) {
+			delete d;
+			return rc;
+		}
+		authorized = true;
+	}
+	if (d->MBREnabled() && !d->MBRDone()) {
+		rc = d->setMBRDone(1, password);
+		if (!rc) authorized = true;
+	}
+	delete d;
+	return rc;
+}
+
+int UnlockSEDs(vector<PbaDrive> &drives, const char *password, const vector<PbaHashSpec> &hashes)
+{
+	int unlocked = 0;
+	vector<char> pw(password, password + strlen(password) + 1);
+	DtaHashAlg savedAlg;
+	unsigned int savedIter;
+	DtaGetHashConfig(&savedAlg, &savedIter);
+	LOG(D1) << "Enter UnlockSEDs";
+	for (PbaDrive &drive : drives) {
+		if (DRIVE_LOCKED != drive.state) continue;
+		for (const PbaHashSpec &spec : hashes) {
+			bool authorized;
+			DtaSetHashConfig(spec.alg, spec.iter);
+			uint8_t rc = unlockDrive(drive.dev, pw.data(), authorized);
+			if (!rc) {
+				drive.state = DRIVE_UNLOCKED;
+				drive.hash = spec.name();
+				unlocked++;
+				break;
+			}
+			LOG(D1) << drive.dev << " " << spec.name() << " rc " << (uint16_t)rc;
+			if (authorized) {
+				// password was right but the drive refused the change
+				drive.state = DRIVE_FAILED;
+				drive.hash = spec.name();
+				break;
+			}
+			if (OPALSTATUSCODE::AUTHORITY_LOCKED_OUT == rc) {
+				// too many tries since power on; more attempts only fail
+				drive.state = DRIVE_FAILED;
+				drive.hash = "locked out, power cycle";
+				break;
+			}
+		}
+	}
+	DtaSetHashConfig(savedAlg, savedIter);
+	memset(pw.data(), 0, pw.size());
+	return unlocked;
+}
+
+int CountSEDs(const vector<PbaDrive> &drives, PbaDriveState state)
+{
+	return (int)count_if(drives.begin(), drives.end(),
+		[state](const PbaDrive &d) { return d.state == state; });
+}

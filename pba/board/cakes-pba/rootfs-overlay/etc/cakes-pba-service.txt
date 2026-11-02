@@ -1,0 +1,12 @@
+
+CakesCats PBA service shell
+
+  sedutil-cli --scan                      list drives
+  sedutil-cli --query /dev/nvme0          OPAL state of a drive
+  sedutil-cli -H sha512 ...               use SHA-512 password hashing
+  cat /tmp/pbaerror.log                   PBA log
+
+  exit                                    back to the password prompt
+  echo warm > /sys/kernel/reboot/mode; reboot -f
+                                          boot the OS with the drives as they are
+

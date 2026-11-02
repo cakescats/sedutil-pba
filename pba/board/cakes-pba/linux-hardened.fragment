@@ -1,0 +1,4 @@
+# Hardened profile: no loadable modules and no network devices at all
+CONFIG_MODULES=n
+CONFIG_NETDEVICES=n
+CONFIG_USB_NET_DRIVERS=n

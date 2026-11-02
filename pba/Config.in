@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_CAKES_PBA_PATH/package/cakes-sedutil/Config.in"

@@ -259,6 +259,16 @@ int main(int argc, char * argv[])
 		LOG(D) << "print default password";
         return d->printDefaultPassword();
         break;
+	case sedutiloption::printPasswordHash:
+	{
+		LOG(D) << "print password hash";
+		vector<uint8_t> hash;
+		DtaHashPwd(hash, argv[opts.password], d);
+		// skip the 2 byte token header
+		for (size_t i = 2; i < hash.size(); i++) printf("%02x", hash[i]);
+		printf("\n");
+		return 0;
+	}
 	case sedutiloption::rawCmd:
 		LOG(D) << "Performing cmdDump ";
 		return d->rawCmd(argv[argc - 7], argv[argc - 6], argv[argc - 5], argv[argc - 4], argv[argc - 3], argv[argc - 2]);
