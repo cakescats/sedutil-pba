@@ -171,8 +171,10 @@ config.h.in
 config.status
 Makefile
 sedutil-*.tar.*
-linuxpba
-sedutil-cli
+/linuxpba
+# the source directory, on case-insensitive file systems
+!/LinuxPBA/
+/sedutil-cli
 
 # GCC
 .deps/
