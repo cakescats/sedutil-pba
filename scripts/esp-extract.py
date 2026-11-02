@@ -67,6 +67,11 @@ def extract(img, base, out):
                 continue
             short = e[:8].decode("latin-1").strip()
             ext = e[8:11].decode("latin-1").strip()
+            # Windows NT case flags, used by mtools for all-lowercase 8.3 names
+            if e[12] & 0x08:
+                short = short.lower()
+            if e[12] & 0x10:
+                ext = ext.lower()
             name = lfn or (short + ("." + ext if ext else ""))
             lfn = ""
             attr = e[11]

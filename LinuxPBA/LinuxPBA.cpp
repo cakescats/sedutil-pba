@@ -194,10 +194,11 @@ int main(int argc, char** argv) {
 				message = CountSEDs(drives, DRIVE_FAILED) ? "Unlock failed" : "No locked OPAL drives found";
 			draw(cfg, drives, message, PBA_C_WARN);
 			message.clear();
-			printf("  " PBA_C_MUTED "R: rescan   Enter: reboot   S: service shell" PBA_C_TEXT "\n");
+			printf("  " PBA_C_MUTED "R: rescan   Enter: reboot%s" PBA_C_TEXT "\n",
+				PBA_SERVICE_OFF == cfg.service ? "" : "   S: service shell");
 			int key = WaitKey(-1);
 			if (('r' == key) || ('R' == key)) drives = ScanSEDs();
-			else if (('s' == key) || ('S' == key)) {
+			else if ((('s' == key) || ('S' == key)) && (PBA_SERVICE_OFF != cfg.service)) {
 				if (serviceAllowed(cfg, message)) enterService();
 			}
 			else if (('\n' == key) || ('\r' == key)) {
