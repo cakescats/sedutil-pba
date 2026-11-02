@@ -204,3 +204,4 @@ tests/host/test_host.log
 tests/host/Version.h
 tests/host/*.o
 __pycache__/
+!tests/host/Makefile
