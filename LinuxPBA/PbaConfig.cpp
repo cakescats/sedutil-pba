@@ -18,6 +18,7 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 
  * C:E********************************************************************** */
 #include "PbaConfig.h"
+#include <stdint.h>
 #include <fstream>
 #include <sstream>
 #include <cstdlib>

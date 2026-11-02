@@ -15,8 +15,18 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # GitVersion.sh runs git describe
       - name: Hash and config tests
         run: make -C tests/host check
+      - name: Native build of sedutil-cli and linuxpba
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends autoconf automake
+          autoreconf -i
+          ./configure
+          make -j"$(nproc)"
+          ./sedutil-cli --validatePBKDF2 | tail -1
 
   image:
     needs: host-tests
