@@ -20,6 +20,7 @@ current laptops ([sedutil#404](https://github.com/Drive-Trust-Alliance/sedutil/i
 | Base | Buildroot 2017.05, kernel 4.11 | Buildroot 2026.02 LTS, kernel 6.18 LTS |
 | Build | prebuilt images, hand-patched forks | reproducible, GitHub Actions, published hashes |
 | Several drives | one password, then an immediate reboot | each password is tried on every locked drive; after a 3 s window you can type another password for the rest |
+| Partitions | the whole drive, one password | partitions can be locked with passwords of their own, typed one after the other ([docs/partitions.md](docs/partitions.md)) |
 | Password hashing | PBKDF2-SHA1, 75000 iterations | the same by default, plus PBKDF2-SHA512 with configurable iterations |
 | Service shell | hidden: type `debug`, root without a password | explicit: on, off, or behind its own password; off in the hardened image |
 | Network | brought up at boot | off. Drivers are kept as modules for later features (hardened image: none) |
@@ -60,7 +61,8 @@ Read the [DTA guide](https://github.com/Drive-Trust-Alliance/sedutil/wiki/Encryp
 4. Power off completely, then turn the machine on.
 
 Several drives can each have their own password. The image only needs to be
-on the drive the firmware boots from.
+on the drive the firmware boots from. Partitions can have their own password
+too, see [docs/partitions.md](docs/partitions.md).
 
 ## Configuration
 
