@@ -126,7 +126,64 @@ static uint8_t unlockDrive(const string &dev, char *password, bool &authorized)
 	return rc;
 }
 
-int UnlockSEDs(vector<PbaDrive> &drives, const char *password, const vector<PbaHashSpec> &hashes)
+/** Read the range table with the Admin1 password and open the ranges
+ *  that have no password of their own; keeps the ranges a range password
+ *  opened earlier marked as unlocked */
+static void readRanges(PbaDrive &drive, char *password)
+{
+	DtaDevOpal *d = static_cast<DtaDevOpal *>(openOpal(drive.dev, isOpal2(drive.dev)));
+	vector<DtaDevOpal::lrStatus_t> table;
+	if (!d->getLockingRanges(password, table)) {
+		vector<PbaRange> ranges;
+		for (const DtaDevOpal::lrStatus_t &lr : table) {
+			if (!lr.lockingrange_num || !lr.size || !(lr.RLKEna || lr.WLKEna)) continue;
+			PbaRange r;
+			r.num = lr.lockingrange_num;
+			r.size = lr.size;
+			r.own_password = lr.userEnabled;
+			r.tries_left = lr.tryLimit ? (int)lr.tryLimit - (int)lr.tries : -1;
+			r.state = ((lr.RLKEna && lr.RLocked) || (lr.WLKEna && lr.WLocked)) ? DRIVE_LOCKED : DRIVE_NOT_LOCKED;
+			for (const PbaRange &old : drive.ranges)
+				if ((old.num == r.num) && (DRIVE_UNLOCKED == old.state) && (DRIVE_NOT_LOCKED == r.state))
+					r.state = DRIVE_UNLOCKED;
+			if ((DRIVE_LOCKED == r.state) && r.own_password && !r.tries_left)
+				r.state = DRIVE_FAILED;
+			if ((DRIVE_LOCKED == r.state) && !r.own_password)
+				r.state = d->setLockingRange((uint8_t)r.num, OPAL_LOCKINGSTATE::READWRITE, password) ?
+					DRIVE_FAILED : DRIVE_UNLOCKED;
+			ranges.push_back(r);
+		}
+		drive.ranges = ranges;
+		drive.ranges_known = true;
+	}
+	delete d;
+}
+
+static PbaRange *findRange(PbaDrive &drive, int num)
+{
+	for (PbaRange &r : drive.ranges)
+		if (r.num == num) return &r;
+	return NULL;
+}
+
+static uint8_t unlockRange(const string &dev, int num, char *password)
+{
+	DtaDev *d = openOpal(dev, isOpal2(dev));
+	uint8_t rc = d->setLockingRangeUser((uint8_t)num, OPAL_LOCKINGSTATE::READWRITE, password);
+	delete d;
+	return rc;
+}
+
+/** Drive still locked anywhere, as level 0 discovery sees it */
+static bool stillLocked(const string &dev)
+{
+	DtaDev *d = openOpal(dev, isOpal2(dev));
+	bool locked = needsUnlock(d);
+	delete d;
+	return locked;
+}
+
+int UnlockSEDs(vector<PbaDrive> &drives, const char *password, const PbaConfig &cfg)
 {
 	int unlocked = 0;
 	vector<char> pw(password, password + strlen(password) + 1);
@@ -135,39 +192,114 @@ int UnlockSEDs(vector<PbaDrive> &drives, const char *password, const vector<PbaH
 	DtaGetHashConfig(&savedAlg, &savedIter);
 	LOG(D1) << "Enter UnlockSEDs";
 	for (PbaDrive &drive : drives) {
-		if (DRIVE_LOCKED != drive.state) continue;
-		for (const PbaHashSpec &spec : hashes) {
-			bool authorized;
+		if ((DRIVE_NOT_OPAL == drive.state) || (DRIVE_FAILED == drive.state)) continue;
+		bool tryAdmin = (DRIVE_LOCKED == drive.state);
+		vector<int> candidates;
+		if (drive.ranges_known) {
+			for (const PbaRange &r : drive.ranges)
+				if ((DRIVE_LOCKED == r.state) && r.own_password) candidates.push_back(r.num);
+		}
+		else if (tryAdmin) {
+			for (int num : cfg.ranges)
+				if (!findRange(drive, num) || (DRIVE_LOCKED == findRange(drive, num)->state))
+					candidates.push_back(num);
+		}
+		if (!tryAdmin && candidates.empty()) continue;
+		int before = unlocked;
+		for (const PbaHashSpec &spec : cfg.hashes) {
 			DtaSetHashConfig(spec.alg, spec.iter);
-			uint8_t rc = unlockDrive(drive.dev, pw.data(), authorized);
-			if (!rc) {
-				drive.state = DRIVE_UNLOCKED;
-				drive.hash = spec.name();
-				unlocked++;
-				break;
+			if (tryAdmin) {
+				bool authorized;
+				uint8_t rc = unlockDrive(drive.dev, pw.data(), authorized);
+				if (!rc) {
+					drive.state = DRIVE_UNLOCKED;
+					drive.hash = spec.name();
+					unlocked++;
+					tryAdmin = false;
+					readRanges(drive, pw.data());
+					// the Admin1 password is not tried on the ranges: a failed
+					// try would count against their TryLimit
+					candidates.clear();
+				}
+				else if (authorized) {
+					// password was right but the drive refused the change
+					drive.state = DRIVE_FAILED;
+					drive.hash = spec.name();
+					tryAdmin = false;
+				}
+				else if (OPALSTATUSCODE::AUTHORITY_LOCKED_OUT == rc) {
+					// too many tries since power on; more attempts only fail
+					drive.state = DRIVE_FAILED;
+					drive.hash = "locked out, power cycle";
+					tryAdmin = false;
+				}
+				else LOG(D1) << drive.dev << " Admin1 " << spec.name() << " rc " << (uint16_t)rc;
 			}
-			LOG(D1) << drive.dev << " " << spec.name() << " rc " << (uint16_t)rc;
-			if (authorized) {
-				// password was right but the drive refused the change
-				drive.state = DRIVE_FAILED;
-				drive.hash = spec.name();
-				break;
-			}
-			if (OPALSTATUSCODE::AUTHORITY_LOCKED_OUT == rc) {
-				// too many tries since power on; more attempts only fail
-				drive.state = DRIVE_FAILED;
-				drive.hash = "locked out, power cycle";
-				break;
+			for (auto it = candidates.begin(); it != candidates.end();) {
+				uint8_t rc = unlockRange(drive.dev, *it, pw.data());
+				if (!rc || (OPALSTATUSCODE::AUTHORITY_LOCKED_OUT == rc)) {
+					PbaRange *r = findRange(drive, *it);
+					if (!r) {
+						drive.ranges.push_back(PbaRange{ *it, 0, DRIVE_LOCKED, true, -1 });
+						r = &drive.ranges.back();
+					}
+					r->state = rc ? DRIVE_FAILED : DRIVE_UNLOCKED;
+					if (!rc) unlocked++;
+					it = candidates.erase(it);
+				}
+				else {
+					PbaRange *r = findRange(drive, *it);
+					if (r && (r->tries_left > 0) && !--r->tries_left) {
+						r->state = DRIVE_FAILED;
+						it = candidates.erase(it);
+					}
+					else ++it;
+				}
 			}
 		}
+		// a range password may have opened the last locked part
+		if ((unlocked > before) && (DRIVE_LOCKED == drive.state) && !stillLocked(drive.dev))
+			drive.state = DRIVE_NOT_LOCKED;
 	}
 	DtaSetHashConfig(savedAlg, savedIter);
 	memset(pw.data(), 0, pw.size());
 	return unlocked;
 }
 
+static const char *stateName(PbaDriveState state)
+{
+	switch (state) {
+	case DRIVE_NOT_OPAL: return "no-opal";
+	case DRIVE_NOT_LOCKED: return "not-locked";
+	case DRIVE_LOCKED: return "locked";
+	case DRIVE_UNLOCKED: return "unlocked";
+	case DRIVE_FAILED: return "failed";
+	}
+	return "?";
+}
+
+string DescribeSEDs(const vector<PbaDrive> &drives)
+{
+	string out;
+	for (const PbaDrive &d : drives) {
+		if (!out.empty()) out += " ";
+		out += d.dev.substr(d.dev.rfind('/') + 1) + "=" + stateName(d.state);
+		if (d.ranges.empty()) continue;
+		out += "[";
+		for (size_t i = 0; i < d.ranges.size(); i++)
+			out += (i ? "," : "") + to_string(d.ranges[i].num) + "=" + stateName(d.ranges[i].state);
+		out += "]";
+	}
+	return out;
+}
+
 int CountSEDs(const vector<PbaDrive> &drives, PbaDriveState state)
 {
-	return (int)count_if(drives.begin(), drives.end(),
-		[state](const PbaDrive &d) { return d.state == state; });
+	int n = 0;
+	for (const PbaDrive &d : drives) {
+		if (d.state == state) n++;
+		for (const PbaRange &r : d.ranges)
+			if (r.state == state) n++;
+	}
+	return n;
 }

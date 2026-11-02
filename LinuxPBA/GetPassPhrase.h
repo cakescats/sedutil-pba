@@ -30,8 +30,11 @@ typedef enum _PassPhraseResult {
 
 /** Read a pass-phrase from the console without echo.
  * Ctrl-U and Ctrl-C clear the line, function and arrow keys are ignored.
+ * initial: characters already typed (e.g. the key that stopped a countdown);
+ * when given, keys typed ahead are kept instead of discarded.
  */
-PassPhraseResult GetPassPhrase(const char *prompt, string &password, bool show_asterisk = true);
+PassPhraseResult GetPassPhrase(const char *prompt, string &password, bool show_asterisk = true,
+	const string &initial = "");
 string GetPassPhrase(const char *prompt, bool show_asterisk = true);
 
 /** Wait for a key press.
@@ -39,4 +42,10 @@ string GetPassPhrase(const char *prompt, bool show_asterisk = true);
  * @param tick called once a second with the seconds left, may be NULL
  * @return the key pressed (27 for Esc and function keys) or -1 on timeout
  */
-int WaitKey(int seconds, void (*tick)(int left, void *ctx) = NULL, void *ctx = NULL);
+int WaitKey(int seconds, void (*tick)(int left, void *ctx) = NULL, void *ctx = NULL, bool drain = true);
+
+/** Keep the console without echo and line editing for as long as the PBA
+ *  runs, so keys typed while it works (e.g. during "Checking...") are not
+ *  shown and wait for the next prompt. false restores the console, before
+ *  the service shell. */
+void ConsoleQuiet(bool on);

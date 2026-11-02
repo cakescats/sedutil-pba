@@ -75,6 +75,28 @@ int PbaParseHashList(const string &value, vector<PbaHashSpec> &out)
 	return 0;
 }
 
+int PbaParseRangeList(const string &value, vector<int> &out)
+{
+	vector<int> list;
+	if (value == "auto") {
+		for (int i = 1; i <= 8; i++) list.push_back(i);
+	}
+	else if ((value != "none") && (value != "off")) {
+		stringstream ss(value);
+		string item;
+		while (getline(ss, item, ',')) {
+			item = trim(item);
+			if (item.empty()) continue;
+			int n;
+			if (!parseInt(item, 1, 15, n)) return 1;
+			list.push_back(n);
+		}
+		if (list.empty()) return 1;
+	}
+	out = list;
+	return 0;
+}
+
 /** Apply one key. fromFile is false for kernel command line values,
  *  which may not touch the service shell settings. */
 static void setKey(PbaConfig &cfg, const string &key, const string &value, bool fromFile)
@@ -83,6 +105,7 @@ static void setKey(PbaConfig &cfg, const string &key, const string &value, bool 
 	if (key == "timeout") ok = parseInt(value, -1, 3600, cfg.timeout);
 	else if (key == "boot_delay") ok = parseInt(value, 0, 60, cfg.boot_delay);
 	else if (key == "hash") ok = !PbaParseHashList(value, cfg.hashes);
+	else if (key == "ranges") ok = !PbaParseRangeList(value, cfg.ranges);
 	else if (key == "reboot") {
 		ok = (value == "warm") || (value == "cold") || (value == "keep");
 		if (ok) cfg.reboot = value;

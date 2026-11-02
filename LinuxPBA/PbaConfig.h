@@ -48,6 +48,10 @@ struct PbaConfig {
 	/** seconds the result stays on screen before the reboot */
 	int boot_delay = 1;
 	std::vector<PbaHashSpec> hashes = { { DTA_HASH_SHA1, 75000 } };
+	/** locking ranges to try a password on (as User n+1) before Admin1
+	 *  has shown which ranges exist: none, auto = 1..8, or a list.
+	 *  Each listed range costs a failed try for every other password. */
+	std::vector<int> ranges;
 	PbaServiceMode service = PBA_SERVICE_ON;
 	/** typing this instead of a password opens the service shell */
 	std::string service_word = "debug";
@@ -68,5 +72,7 @@ void PbaLoadConfig(PbaConfig &cfg, const char *file = "/etc/cakes-pba.conf",
 	const char *cmdline = "/proc/cmdline");
 /** Parse a comma separated list of hash specs, e.g. "sha1:75000,sha512" */
 int PbaParseHashList(const std::string &value, std::vector<PbaHashSpec> &out);
+/** Parse the ranges setting: "auto", "none" or e.g. "1,2" */
+int PbaParseRangeList(const std::string &value, std::vector<int> &out);
 /** Check password against cfg.service_hash */
 bool PbaCheckServicePassword(const PbaConfig &cfg, const std::string &password);

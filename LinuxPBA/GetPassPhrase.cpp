@@ -49,6 +49,27 @@ private:
 	bool ok;
 };
 
+static struct termios consoleOriginal;
+static bool consoleQuiet = false;
+
+void ConsoleQuiet(bool on)
+{
+	if (on && !consoleQuiet) {
+		if (tcgetattr(0, &consoleOriginal)) return;
+		struct termios raw = consoleOriginal;
+		raw.c_lflag &= ~(ICANON | ECHO | ISIG | IEXTEN);
+		raw.c_iflag |= ICRNL;
+		raw.c_cc[VMIN] = 1;
+		raw.c_cc[VTIME] = 0;
+		tcsetattr(0, TCSANOW, &raw);
+		consoleQuiet = true;
+	}
+	else if (!on && consoleQuiet) {
+		tcsetattr(0, TCSANOW, &consoleOriginal);
+		consoleQuiet = false;
+	}
+}
+
 /** Wait up to ms milliseconds for input on stdin */
 static bool inputReady(int ms)
 {
@@ -79,7 +100,8 @@ static void drainInput()
 	while (inputReady(0)) readByte();
 }
 
-PassPhraseResult GetPassPhrase(const char *prompt, string &password, bool show_asterisk)
+PassPhraseResult GetPassPhrase(const char *prompt, string &password, bool show_asterisk,
+	const string &initial)
 {
 	const int BACKSPACE = 127;
 	const int CTRL_H = 8;
@@ -87,11 +109,13 @@ PassPhraseResult GetPassPhrase(const char *prompt, string &password, bool show_a
 	const int CTRL_U = 21;
 	const size_t MAXLEN = 256;
 	RawTerminal raw;
-	password.clear();
+	password = initial;
 	LOG(D4) << "Enter GetPassPhrase";
 	printf("%s", prompt);
+	if (show_asterisk)
+		for (size_t i = 0; i < password.length(); i++) printf("*");
 	fflush(stdout);
-	drainInput();
+	if (initial.empty()) drainInput();
 	for (;;) {
 		int ch = readKey();
 		if ((ch < 0) || ('\n' == ch) || ('\r' == ch))
@@ -136,10 +160,10 @@ static long nowMs()
 	return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
 }
 
-int WaitKey(int seconds, void (*tick)(int left, void *ctx), void *ctx)
+int WaitKey(int seconds, void (*tick)(int left, void *ctx), void *ctx, bool drain)
 {
 	RawTerminal raw;
-	drainInput();
+	if (drain) drainInput();
 	if (seconds < 0) return readKey();
 	long deadline = nowMs() + seconds * 1000L;
 	for (int left = seconds; left > 0; left--) {

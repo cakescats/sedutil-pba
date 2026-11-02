@@ -88,6 +88,15 @@ static void testConfig()
 	CHECK(cfg2.service == PBA_SERVICE_OFF); /* no service_hash */
 	CHECK(!cfg2.service_boot);
 	CHECK(cfg2.timeout == 3);
+	CHECK(cfg2.ranges.empty()); /* ranges = none by default */
+
+	std::vector<int> ranges;
+	CHECK(!PbaParseRangeList("auto", ranges) && ranges.size() == 8 && ranges[0] == 1 && ranges[7] == 8);
+	CHECK(!PbaParseRangeList("1, 3", ranges) && ranges.size() == 2 && ranges[1] == 3);
+	CHECK(!PbaParseRangeList("none", ranges) && ranges.empty());
+	CHECK(PbaParseRangeList("0", ranges));
+	CHECK(PbaParseRangeList("1,x", ranges));
+	CHECK(PbaParseRangeList("", ranges));
 	remove(conf);
 	remove(cmdline);
 }

@@ -81,6 +81,22 @@ static void draw(const PbaConfig &cfg, const vector<PbaDrive> &drives,
 		printf("  " PBA_C_BRIGHT "%s" PBA_C_TEXT " %s " PBA_C_MUTED "%s" PBA_C_TEXT " %s%s" PBA_C_TEXT "\n",
 			fit(dev, 7).c_str(), fit(d.model, modelWidth).c_str(),
 			fit(d.serial, serialWidth).c_str(), color, state.c_str());
+		for (const PbaRange &r : d.ranges) {
+			const char *rcolor = PBA_C_MUTED;
+			string rstate = "not locked";
+			if (DRIVE_LOCKED == r.state) {
+				rstate = "locked";
+				if (r.tries_left > 0) rstate += ", " + to_string(r.tries_left) + " tr" + (r.tries_left == 1 ? "y" : "ies") + " left";
+				rcolor = PBA_C_WARN;
+			}
+			if (DRIVE_UNLOCKED == r.state) { rstate = "unlocked"; rcolor = PBA_C_OK; }
+			if (DRIVE_FAILED == r.state) { rstate = "failed (locked out, power cycle)"; rcolor = PBA_C_ERROR; }
+			char size[32] = "";
+			if (r.size) snprintf(size, sizeof(size), "%.1f GiB", r.size / 2097152.0);
+			printf("  %s " PBA_C_TEXT "%s " PBA_C_MUTED "%s" PBA_C_TEXT " %s%s" PBA_C_TEXT "\n",
+				fit("", 7).c_str(), fit("  range " + to_string(r.num), modelWidth).c_str(),
+				fit(size, serialWidth).c_str(), rcolor, rstate.c_str());
+		}
 	}
 	printf("\n");
 	for (const string &w : cfg.warnings)
@@ -113,6 +129,7 @@ static bool serviceAllowed(const PbaConfig &cfg, string &message)
 
 static void enterService()
 {
+	ConsoleQuiet(false);
 	screen.restore();
 	exit(PBA_EXIT_SERVICE);
 }
@@ -135,9 +152,9 @@ static void setRebootMode(const string &mode)
 static void countdownTick(int left, void *ctx)
 {
 	int stillLocked = *(int *)ctx;
-	printf("\r  " PBA_C_TEXT "%d drive%s still locked. Press any key to enter another password, "
+	printf("\r  " PBA_C_TEXT "%d drive%s or range%s still locked. Type the next password, "
 		"starting the OS in " PBA_C_BRIGHT "%d" PBA_C_TEXT " s ",
-		stillLocked, stillLocked == 1 ? " is" : "s are", left);
+		stillLocked, stillLocked == 1 ? "" : "s", stillLocked == 1 ? " is" : "s are", left);
 	fflush(stdout);
 }
 
@@ -168,6 +185,7 @@ int main(int argc, char** argv) {
 
 	PbaConfig cfg;
 	PbaLoadConfig(cfg);
+	ConsoleQuiet(true);
 	screen.init(cfg.logo, cfg.logo_file);
 	draw(cfg, vector<PbaDrive>(), "Scanning drives", PBA_C_MUTED);
 
@@ -181,10 +199,13 @@ int main(int argc, char** argv) {
 	kmsg("scan: " + to_string(drives.size()) + " drive(s), " +
 		to_string(CountSEDs(drives, DRIVE_LOCKED)) + " locked");
 	for (const string &w : cfg.warnings) kmsg("config: " + w);
+	kmsg("state: " + DescribeSEDs(drives));
 
 	string message;
 	const char *messageColor = PBA_C_TEXT;
 	string password;
+	// a key that stopped the countdown and starts the next password
+	string typed;
 	for (;;) {
 		int locked = CountSEDs(drives, DRIVE_LOCKED);
 		int unlocked = CountSEDs(drives, DRIVE_UNLOCKED);
@@ -215,7 +236,8 @@ int main(int argc, char** argv) {
 			printf("  " PBA_C_MUTED "Enter on an empty line or Esc starts the OS with the remaining drives locked"
 				PBA_C_TEXT "\n\n");
 		PassPhraseResult res = GetPassPhrase(unlocked ? "  Password for the remaining drives: " : "  Password: ",
-			password);
+			password, true, typed);
+		wipe(typed);
 		if ((PASSPHRASE_ESCAPE == res) || password.empty()) {
 			if (unlocked) bootOS(cfg, drives);
 			continue;
@@ -229,8 +251,9 @@ int main(int argc, char** argv) {
 
 		printf("  " PBA_C_MUTED "Checking..." PBA_C_TEXT "\n");
 		fflush(stdout);
-		int now = UnlockSEDs(drives, password.c_str(), cfg.hashes);
+		int now = UnlockSEDs(drives, password.c_str(), cfg);
 		wipe(password);
+		kmsg("state: " + DescribeSEDs(drives));
 		if (!now) {
 			message = "No locked drive accepted this password";
 			messageColor = PBA_C_ERROR;
@@ -241,7 +264,10 @@ int main(int argc, char** argv) {
 		if (!locked || !cfg.timeout) bootOS(cfg, drives);
 		if (cfg.timeout < 0) continue;
 		draw(cfg, drives, "", PBA_C_TEXT);
-		if (WaitKey(cfg.timeout, countdownTick, &locked) < 0) bootOS(cfg, drives);
+		// keys typed while the last password was checked belong to the next one
+		int key = WaitKey(cfg.timeout, countdownTick, &locked, false);
+		if (key < 0) bootOS(cfg, drives);
+		if ((key >= 32) && (key < 127)) typed = string(1, (char)key);
 	}
 	return 0;
 }
