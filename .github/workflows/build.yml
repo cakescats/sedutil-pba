@@ -26,9 +26,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends autoconf automake
           autoreconf -i
-          ./configure
+          ./configure LDFLAGS=-static
           make -j"$(nproc)"
           ./sedutil-cli --validatePBKDF2 | tail -1
+          mkdir -p cli && cp sedutil-cli cli/sedutil-cli-linux-x86_64
+          (cd cli && sha256sum sedutil-cli-linux-x86_64 > sedutil-cli-linux-x86_64.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sedutil-cli
+          path: cli/
 
   image:
     needs: host-tests
@@ -91,7 +97,6 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: cakes-pba-*
           merge-multiple: true
       - name: Publish release
         env:
@@ -99,4 +104,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "CakesCats PBA $GITHUB_REF_NAME" --notes "See README for how to install." \
-            dist/*.img.gz dist/*.sha256
+            dist/*.img.gz dist/*.sha256 sedutil-cli-linux-x86_64 sedutil-cli-linux-x86_64.sha256
