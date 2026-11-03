@@ -63,5 +63,6 @@ int DtaParseHashSpec(const char *spec, DtaHashAlg *alg, unsigned int *iter);
  */
 void DtaHashPassword(vector<uint8_t> &hash, char * password, vector<uint8_t> salt,
         unsigned int iter = 75000, uint8_t hashsize = 32, DtaHashAlg alg = DTA_HASH_SHA1);
-/** Test the hshing function using publicly available test cased and report */
+/** Test the hshing function using publicly available test cased and report.
+ * @return 0 when every case passed */
 int TestPBKDF2();

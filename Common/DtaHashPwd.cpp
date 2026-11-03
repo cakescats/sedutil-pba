@@ -219,6 +219,6 @@ int TestPBKDF2()
         cout << "passed\n";
     else
         cout << "**FAILED**\n";
-    return 0;
+    return pass ? 0 : 1;
 }
 

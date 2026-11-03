@@ -68,7 +68,8 @@ jobs:
         shell: bash
         run: |
           exe=$(find windows -name sedutil-cli.exe -path '*Release*' | head -n 1)
-          "$exe" --validatePBKDF2 | tail -n 1
+          "$exe" --validatePBKDF2 | tee pbkdf2.log | tail -n 1
+          grep -q 'validation suite ... passed' pbkdf2.log
           mkdir cli && cp "$exe" cli/sedutil-cli-windows-x64.exe
           (cd cli && sha256sum sedutil-cli-windows-x64.exe > sedutil-cli-windows-x64.exe.sha256)
       - uses: actions/upload-artifact@v4
