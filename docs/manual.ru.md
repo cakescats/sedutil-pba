@@ -52,7 +52,7 @@ CakesCats PBA — предзагрузочная программа (pre-boot au
 | `*.sha256` | Контрольные суммы. |
 
 ```bash
-sha256sum -c cakes-pba-*-default.img.sha256
+sha256sum -c --ignore-missing cakes-pba-*-default.img.sha256
 gunzip -k cakes-pba-*-default.img.gz
 chmod +x sedutil-cli-linux-x86_64
 sudo ln -s "$PWD/sedutil-cli-linux-x86_64" /usr/local/bin/sedutil-cli

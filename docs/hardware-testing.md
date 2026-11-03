@@ -19,7 +19,7 @@ unlocks the drive, the same drive boots Linux. Back it up first.
 Use a test password, not `debug`: the service shell takes that word.
 
 ```
-sha256sum -c cakes-pba-*-default.img.sha256
+sha256sum -c --ignore-missing cakes-pba-*-default.img.sha256
 chmod +x sedutil-cli-linux-x86_64
 alias sedutil='sudo ./sedutil-cli-linux-x86_64'
 ```
@@ -93,7 +93,7 @@ results in [sleep-matrix.md](sleep-matrix.md).
 
 - [ ] Use a spare OPAL SSD if you can. If the drive holds data, back it up.
 - [ ] Write down the PSID from the label of every test drive.
-- [ ] Check the image hash: `sha256sum -c cakes-pba-*.sha256`.
+- [ ] Check the image hash: `sha256sum -c --ignore-missing cakes-pba-*.sha256`.
 
 **1. Boot without touching the drive**
 
