@@ -27,6 +27,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends autoconf automake
           autoreconf -i
           ./configure LDFLAGS=-static
+          # same version string as the PBA image (scripts/build.sh)
+          ver=$(git describe --tags --match 'v*' --dirty 2>/dev/null | sed 's/^v//') ||
+            ver="$(cat VERSION)+g$(git rev-parse --short HEAD)"
+          echo "#define GIT_VERSION \"$ver\"" > linux/Version.h
           make -j"$(nproc)"
           ./sedutil-cli --validatePBKDF2 | tail -1
           mkdir -p cli && cp sedutil-cli cli/sedutil-cli-linux-x86_64

@@ -12,7 +12,13 @@ mkdir -p "$ESP/cakes"
 cp "$BINARIES_DIR/bzImage" "$BINARIES_DIR/rootfs.cpio.xz" "$ESP/cakes/"
 sed -e "s/@VERSION@/$VERSION/g" "$BOARD_DIR/grub.cfg" > "$ESP/EFI/BOOT/grub.cfg"
 if [ "$PROFILE" = hardened ]; then
-	sed -i -e '/#@service-begin/,/#@service-end/d' "$ESP/EFI/BOOT/grub.cfg"
+	# no service entry, and no GRUB editor or command line: with them anyone
+	# at the keyboard could boot the kernel with rdinit=/bin/sh. An empty
+	# superusers list locks both; the entries stay bootable as --unrestricted.
+	sed -i -e '/#@service-begin/,/#@service-end/d' \
+		-e 's/^set default=0$/set default=0\nset superusers=""/' \
+		-e 's/^\(menuentry "[^"]*"\) {$/\1 --unrestricted {/' \
+		"$ESP/EFI/BOOT/grub.cfg"
 fi
 
 support/scripts/genimage.sh -c "$BOARD_DIR/genimage.cfg"
