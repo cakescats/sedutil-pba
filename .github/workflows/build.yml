@@ -109,6 +109,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # a release made by hand from earlier CI builds keeps its assets
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists, not touching it"
+            exit 0
+          fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "CakesCats PBA $GITHUB_REF_NAME" --notes "See README for how to install." \
             dist/*.img.gz dist/*.sha256 sedutil-cli-linux-x86_64 sedutil-cli-linux-x86_64.sha256
