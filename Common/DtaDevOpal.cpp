@@ -1558,7 +1558,7 @@ uint8_t DtaDevOpal::getLockingRanges(char * Admin1Password, vector<lrStatus_t> &
 		}
 		lrStatus_t lr;
 		lr.command_status = 0;
-		lr.lockingrange_num = i;
+		lr.lockingrange_num = (uint8_t)i;
 		lr.start = response.getUint64(4);
 		lr.size = response.getUint64(8);
 		lr.RLKEna = (response.getUint8(12) != 0);
@@ -2143,7 +2143,7 @@ uint8_t DtaDevOpal::stackReset()
 			LOG(E) << "STACK_RESET receive failed " << (uint16_t)lastRC;
 			return lastRC;
 		}
-		uint16_t avail = (buf[10] << 8) | buf[11];
+		uint16_t avail = (uint16_t)((buf[10] << 8) | buf[11]);
 		if (avail < 4) continue;
 		uint32_t status = ((uint32_t)buf[12] << 24) | (buf[13] << 16) | (buf[14] << 8) | buf[15];
 		if (status) {
