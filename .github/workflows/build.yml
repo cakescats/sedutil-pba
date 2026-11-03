@@ -28,8 +28,11 @@ jobs:
           autoreconf -i
           ./configure LDFLAGS=-static
           # same version string as the PBA image (scripts/build.sh)
-          ver=$(git describe --tags --match 'v*' --dirty 2>/dev/null | sed 's/^v//') ||
+          if ver=$(git describe --tags --match 'v*' --dirty 2>/dev/null); then
+            ver=${ver#v}
+          else
             ver="$(cat VERSION)+g$(git rev-parse --short HEAD)"
+          fi
           echo "#define GIT_VERSION \"$ver\"" > linux/Version.h
           make -j"$(nproc)"
           ./sedutil-cli --validatePBKDF2 | tail -1
