@@ -2128,8 +2128,8 @@ uint8_t DtaDevOpal::stackReset()
 	uint8_t *buf = (uint8_t *)(((uintptr_t)raw + IO_BUFFER_ALIGNMENT) & ~(uintptr_t)(IO_BUFFER_ALIGNMENT - 1));
 	memset(buf, 0, MIN_BUFFER_LENGTH);
 	uint16_t id = comID();
-	buf[0] = id >> 8;
-	buf[1] = id & 0xff;
+	buf[0] = (uint8_t)(id >> 8);
+	buf[1] = (uint8_t)(id & 0xff);
 	buf[7] = 0x02;
 	if ((lastRC = sendCmd(IF_SEND, 0x02, id, buf, 512)) != 0) {
 		LOG(E) << "STACK_RESET send failed " << (uint16_t)lastRC;
