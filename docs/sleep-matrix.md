@@ -45,6 +45,7 @@ with the CakesCats image.
 
 | Machine (model, CPU, BIOS) | OS | State | Image | Result | Notes |
 |---|---|---|---|---|---|
+| Desktop, Ryzen 7 7800X3D, KIOXIA XG8 3.84 TB in an M.2 slot | Ubuntu 26.04 (kernel 7.0) | deep (S3) | CakesCats and FIXED 1.20 | **locked after resume** | The board cuts power to the M.2 slot in S3; the journal shows the partition table re-read after resume. Same with both images, so the PBA is not the cause. The machine also woke up on its own after 9 to 18 s, and hung once. (2026-11-02) |
 | | Windows 11 | S3 / Modern Standby | FIXED 1.20 | | |
 | | Windows 11 | S3 / Modern Standby | CakesCats | | |
 | | Windows 11 | Hibernate | CakesCats | | |

@@ -40,6 +40,9 @@ Every release has two images, each with a `.sha256` file:
 
 ## Install
 
+The full guide, from checking the drive to recovery, is the
+[user manual](docs/manual.md) ([по-русски](docs/manual.ru.md)). In short:
+
 You need `sedutil-cli`, either from this repository or the DTA 1.20 binaries.
 Read the [DTA guide](https://github.com/Drive-Trust-Alliance/sedutil/wiki/Encrypting-your-drive) first.
 

@@ -24,7 +24,7 @@ self-encrypting drive). Это форк [sedutil](https://github.com/Drive-Trust
 2. Проверьте образ с флешки.
 3. Настройте диск командами `sedutil-cli --initialSetup`, `--loadPBAimage`, `--setMBREnable on`, `--enableLockingRange 0`.
 
-Подробности — в [README.md](README.md#install).
+Подробно, от проверки диска до восстановления, — в [руководстве пользователя](docs/manual.ru.md).
 
 Для SHA-512 добавьте ключ `-H sha512` к командам sedutil-cli и пропишите
 `hash = sha512` в конфиге образа.
