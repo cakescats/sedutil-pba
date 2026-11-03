@@ -73,6 +73,14 @@ Settings live in `/etc/cakes-pba.conf` inside the image. Every key except the
 service shell ones can also be set from the boot menu (`EFI/BOOT/grub.cfg` on
 the image) as `cakes.<key>=<value>`. See [docs/configuration.md](docs/configuration.md).
 
+To use your own settings and logo, build a custom image from a release in a
+second with the [image builder](docs/builder.md):
+
+```
+python3 tools/cakes-builder.py build -i cakes-pba-<version>-default.img.gz -o my-pba.img \
+    --set timeout=10 --set "title=ACME Corp" --logo logo.png
+```
+
 ## Sleep and hibernation
 
 The PBA only runs at a cold boot. What happens on sleep depends on whether
@@ -100,7 +108,7 @@ Or use the `Dockerfile`. The image ends up in `dist/`.
 
 ## Roadmap
 
-Planned: a builder for custom images, OPAL tools for Windows and Linux, PIN
+Planned: a configurator and skins, OPAL tools for Windows and Linux, PIN
 and emergency erase, USB key files, a native UEFI PBA, and TPM and corporate
 unlock. See [docs/roadmap.md](docs/roadmap.md).
 

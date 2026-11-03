@@ -13,13 +13,19 @@ FIXED image on current hardware. It adds:
 
 Tested on a real KIOXIA XG8, both in a VM with the drive passed through and on bare metal.
 
+**Image builder** (`tools/cakes-builder.py`, [builder.md](builder.md)). It
+makes a custom image from a released one in a second: settings, logo and
+extra files go into an overlay cpio that GRUB loads after the initramfs. The
+released kernel and initramfs stay untouched.
+
 The stages below are separate pieces of work. Order and status are tracked here.
 
 ## Next
 
-### Skins and the image builder
+### Skins and the configurator
 
-These come first because the GUI, corporate images and the configurator all build on them.
+These come first because the GUI and corporate images build on them. The
+overlay mechanism and the builder are done.
 
 - **Skin**: a directory with `skin.ini` (colours, texts, layout options)
   plus PNG images and fonts. It holds:
@@ -28,14 +34,10 @@ These come first because the GUI, corporate images and the configurator all buil
   - a helpdesk line ("Forgot the password? Call +…");
   - a legal banner;
   - options to turn off parts of the screen (for example the game).
-- **Delivery without a rebuild.** A skin is packed as a small cpio archive
-  that GRUB loads as a second initrd:
-  `initrd /cakes/rootfs.cpio.xz /cakes/skin.cpio`. The kernel lays it over the
-  root file system. Settings use the same mechanism: `/etc/cakes-pba.conf` in
-  an overlay cpio.
-- **`cakes-builder`**: takes a released image, a config and a skin, and writes
-  a new image. No Buildroot, runs in seconds. It can also sign for Secure
-  Boot, with the owner's keys through `sbctl`, or with shim.
+- **Delivery without a rebuild**: through the builder's overlay, like
+  settings and the logo today (`--skin dir` on top of `--file`).
+- **Secure Boot** in the builder: sign GRUB and the kernel with the owner's
+  keys through `sbctl`, or with shim.
 - **Configurator**: a static web page (GitHub Pages). You pick the settings,
   upload a logo and see a preview, and the image is built in the browser
   (WebAssembly), so nothing is uploaded anywhere.

@@ -209,17 +209,16 @@ sudo sedutil-cli --setupPartitionRanges nvme0n1p2 <пароль A> <Admin1> /dev
 | `service` | `on` | Сервисная консоль: `on`, `off` или `password` (с `service_hash`, его делает `tools/mkservicehash.py`). |
 | `ranges` | `none` | Пробовать ли пароли разделов до пароля Admin1. |
 
-Чтобы поменять ключ в готовом образе без пересборки, правьте `grub.cfg` на
-FAT-разделе образа **до** `--loadPBAimage`:
+Свои настройки и логотип задаёт [билдер образов](builder.md). Он делает новый
+образ из релизного за секунду и работает на Linux, macOS и Windows:
 
 ```bash
-mkdir m && sudo mount -o loop,offset=1048576 cakes-pba-*-default.img m
-sudo sed -i 's/reboot=warm"/reboot=warm cakes.timeout=10"/' m/EFI/BOOT/grub.cfg
-sudo umount m
+python3 cakes-builder.py build -i cakes-pba-<версия>-default.img.gz -o my-pba.img \
+    --set timeout=10 --set "title=ACME Corp" --logo logo.png
 ```
 
-Свой логотип и свои значения в `cakes-pba.conf` требуют пересборки:
-`scripts/build.sh --logo logo.png`. Конструктор образов — в планах.
+Потом загрузите `my-pba.img` командой `--loadPBAimage`. `cakes-builder.py`
+приложен к каждому релизу и лежит в `tools/`.
 
 ## 9. Сон и гибернация
 

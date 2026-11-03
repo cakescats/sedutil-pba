@@ -43,8 +43,12 @@ wait_for() { # file pattern seconds
 
 echo "== 1: kernel and initramfs, serial log"
 python3 -I "$TOP/scripts/esp-extract.py" "$IMG" "$WORK/esp" >/dev/null
+# GRUB loads the overlay a builder image has after the initramfs; the kernel
+# unpacks concatenated archives in order, so one file does the same here
+cat "$WORK/esp/cakes/rootfs.cpio.xz" > "$WORK/initrd"
+[ -f "$WORK/esp/cakes/overlay.cpio" ] && cat "$WORK/esp/cakes/overlay.cpio" >> "$WORK/initrd"
 $QEMU -display none -serial "file:$OUT/serial.log" \
-	-kernel "$WORK/esp/cakes/bzImage" -initrd "$WORK/esp/cakes/rootfs.cpio.xz" \
+	-kernel "$WORK/esp/cakes/bzImage" -initrd "$WORK/initrd" \
 	-append "console=ttyS0,115200 loglevel=7 libata.allow_tpm=1 reboot=warm" &
 QPID=$!
 if ! wait_for "$OUT/serial.log" "cakes-pba: scan:" 300; then

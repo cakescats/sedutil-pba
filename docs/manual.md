@@ -194,17 +194,17 @@ The main ones:
 | `service` | `on` | Service shell: `on`, `off` or `password` (with `service_hash` from `tools/mkservicehash.py`). |
 | `ranges` | `none` | Whether partition passwords are tried before Admin1. |
 
-To change a key in a released image without rebuilding, edit `grub.cfg` on the
-image's FAT partition **before** `--loadPBAimage`:
+To change settings or the logo, make your own image from a released one with
+the [image builder](builder.md). It takes a second and runs on Linux, macOS
+and Windows:
 
 ```bash
-mkdir m && sudo mount -o loop,offset=1048576 cakes-pba-*-default.img m
-sudo sed -i 's/reboot=warm"/reboot=warm cakes.timeout=10"/' m/EFI/BOOT/grub.cfg
-sudo umount m
+python3 cakes-builder.py build -i cakes-pba-<version>-default.img.gz -o my-pba.img \
+    --set timeout=10 --set "title=ACME Corp" --logo logo.png
 ```
 
-Your own logo or `cakes-pba.conf` values need a rebuild:
-`scripts/build.sh --logo logo.png`. An image builder is planned.
+Then load `my-pba.img` with `--loadPBAimage`. `cakes-builder.py` is attached
+to every release and lives in `tools/`.
 
 ## 9. Sleep and hibernation
 

@@ -63,7 +63,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bc bison build-essential \
             bzip2 cpio file flex libelf-dev libssl-dev rsync unzip wget xz-utils \
-            qemu-system-x86 ovmf
+            qemu-system-x86 ovmf dosfstools
 
       - name: Download cache
         uses: actions/cache@v4
@@ -86,6 +86,18 @@ jobs:
           img=$(ls dist/cakes-pba-*-${{ matrix.profile }}.img)
           SHOT_WAIT=60 scripts/qemu-smoke.sh "$img" qemu-smoke
 
+      - name: Image builder
+        run: |
+          img=$(ls dist/cakes-pba-*-${{ matrix.profile }}.img.gz)
+          mkdir -p builder-test
+          tools/cakes-builder.py build -i "$img" -o builder-test/custom.img \
+            --set "title=Builder test" --set timeout=10 --logo branding/logo.png
+          tools/cakes-builder.py show builder-test/custom.img
+          # the rebuilt FAT must be clean
+          dd if=builder-test/custom.img of=builder-test/esp.fat bs=1M skip=1 count=30 status=none
+          fsck.fat -n builder-test/esp.fat
+          SHOT_WAIT=60 scripts/qemu-smoke.sh builder-test/custom.img builder-test/qemu-smoke
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -93,6 +105,7 @@ jobs:
           path: |
             dist/
             qemu-smoke/
+            builder-test/qemu-smoke/
           if-no-files-found: ignore
 
   release:
@@ -102,6 +115,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
@@ -116,4 +130,5 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "CakesCats PBA $GITHUB_REF_NAME" --notes "See README for how to install." \
-            dist/*.img.gz dist/*.sha256 sedutil-cli-linux-x86_64 sedutil-cli-linux-x86_64.sha256
+            dist/*.img.gz dist/*.sha256 sedutil-cli-linux-x86_64 sedutil-cli-linux-x86_64.sha256 \
+            tools/cakes-builder.py
