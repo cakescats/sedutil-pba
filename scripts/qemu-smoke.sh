@@ -9,6 +9,9 @@
 # 2. the whole image through GRUB: saves a screenshot of the PBA screen and
 #    checks most of it is the PBA background colour.
 #
+# With SSO_KEY set (the image's sso_key), also presses F2, checks the QR
+# code's token the way the unlock server does, and saves sso.ppm.
+#
 # QEMU cannot emulate an OPAL drive, so unlocking itself is tested on hardware.
 set -euo pipefail
 
@@ -47,13 +50,45 @@ python3 -I "$TOP/scripts/esp-extract.py" "$IMG" "$WORK/esp" >/dev/null
 # unpacks concatenated archives in order, so one file does the same here
 cat "$WORK/esp/cakes/rootfs.cpio.xz" > "$WORK/initrd"
 [ -f "$WORK/esp/cakes/overlay.cpio" ] && cat "$WORK/esp/cakes/overlay.cpio" >> "$WORK/initrd"
-$QEMU -display none -serial "file:$OUT/serial.log" \
+$QEMU -display none -serial "file:$OUT/serial.log" -monitor "unix:$WORK/mon1,server,nowait" \
 	-kernel "$WORK/esp/cakes/bzImage" -initrd "$WORK/initrd" \
 	-append "console=ttyS0,115200 loglevel=7 libata.allow_tpm=1 reboot=warm" &
 QPID=$!
 if ! wait_for "$OUT/serial.log" "cakes-pba: scan:" 300; then
 	kill $QPID; tail -n 40 "$OUT/serial.log"
 	echo "FAIL: PBA did not start" >&2; exit 1
+fi
+if [ -n "${SSO_KEY:-}" ]; then
+	# F2 on the PBA screen must show a QR code whose token the server accepts
+	sleep 8 # past the rescans of an empty drive list
+	monitor() { python3 -I - "$WORK/mon1" "$1" <<'PY'
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX)
+s.connect(sys.argv[1])
+time.sleep(0.5)
+s.recv(4096)
+s.sendall(sys.argv[2].encode() + b"\n")
+time.sleep(2)
+PY
+	}
+	monitor "sendkey f2"
+	if ! wait_for "$OUT/serial.log" "cakes-pba: sso:" 30; then
+		kill $QPID; echo "FAIL: F2 did not show the QR code" >&2; exit 1
+	fi
+	monitor "screendump $OUT/sso.ppm"
+	url=$(grep -o 'cakes-pba: sso: [^[:space:]]*' "$OUT/serial.log" | tail -n 1 | cut -d' ' -f3)
+	python3 -I - "$url" "$SSO_KEY" <<'PY' || { kill $QPID; exit 1; }
+# the token format of LinuxPBA/PbaSso.cpp, as the unlock server checks it
+import base64, hashlib, hmac, sys, urllib.parse
+url = urllib.parse.urlsplit(sys.argv[1])
+machine = urllib.parse.unquote(url.path.rsplit("/", 1)[1])
+token = urllib.parse.parse_qs(url.query)["c"][0]
+raw = base64.b32decode(token)
+msg = b"cakes-pba-sso-v1\0" + machine.encode() + b"\0" + raw[:4]
+ok = hmac.compare_digest(hmac.new(bytes.fromhex(sys.argv[2]), msg, hashlib.sha512).digest()[:6], raw[4:])
+print(f"sso: {url.scheme}://{url.netloc}, machine {machine}, token {'valid' if ok else 'INVALID'}")
+sys.exit(0 if ok else 1)
+PY
 fi
 kill $QPID; wait $QPID 2>/dev/null || true
 grep "cakes-pba:" "$OUT/serial.log"

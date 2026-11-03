@@ -40,9 +40,11 @@ CLEANFILES = linux/Version.h
 BUILT_SOURCES = linux/Version.h
 #
 linuxpba_SOURCES = LinuxPBA/LinuxPBA.cpp LinuxPBA/GetPassPhrase.cpp LinuxPBA/UnlockSEDs.cpp \
-	LinuxPBA/PbaConfig.cpp LinuxPBA/PbaScreen.cpp \
+	LinuxPBA/PbaConfig.cpp LinuxPBA/PbaScreen.cpp LinuxPBA/PbaSso.cpp \
+	LinuxPBA/qrcodegen/qrcodegen.cpp \
 	LinuxPBA/GetPassPhrase.h LinuxPBA/UnlockSEDs.h \
-	LinuxPBA/PbaConfig.h LinuxPBA/PbaScreen.h \
+	LinuxPBA/PbaConfig.h LinuxPBA/PbaScreen.h LinuxPBA/PbaSso.h \
+	LinuxPBA/qrcodegen/qrcodegen.hpp \
 	$(SEDUTIL_LINUX_CODE) \
 	$(SEDUTIL_COMMON_CODE)
 EXTRA_DIST = linux/GitVersion.sh linux/PSIDRevert_LINUX.txt linux/TestSuite.sh README.md docs/sedutil-cli.8

@@ -38,6 +38,14 @@ PBA запускается только при холодной загрузке
 
 Как проверить на своей машине — в [docs/sleep-matrix.md](docs/sleep-matrix.md).
 
+## Для компаний
+
+Разблокировка через корпоративный аккаунт (SSO по QR-коду), сервер
+разблокировки и развёртывание через MDM (Intune, Ansible) — в
+[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise).
+Поддержка в самом PBA есть в обычном образе и выключена, пока её не включит
+билдер ([docs/sso.md](docs/sso.md)).
+
 ## Сборка
 
 ```

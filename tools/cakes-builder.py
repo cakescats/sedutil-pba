@@ -6,6 +6,10 @@
         [--file src:/dest/path ...] [--gzip]
     cakes-builder.py show my-pba.img
 
+Unlocking with a company account (docs/sso.md) is turned on with
+--sso-url and --machine-id; the machine key goes into <output>.machine.json
+for the unlock server.
+
 The released image is not rebuilt. The builder adds a small overlay archive,
 cakes/overlay.cpio, next to the image's initramfs, and GRUB loads both:
 the kernel unpacks them in order, so files in the overlay replace the ones
@@ -22,6 +26,7 @@ Standard library only: runs on Linux, macOS and Windows without root.
 import argparse
 import gzip
 import hashlib
+import json
 import lzma
 import os
 import re
@@ -37,7 +42,8 @@ CONF_PATH = "etc/cakes-pba.conf"
 LOGO_PATH = "usr/share/cakes-pba/logo.ppm"
 # keys LinuxPBA/PbaConfig.cpp understands
 KNOWN_KEYS = {"timeout", "boot_delay", "hash", "reboot", "logo", "logo_file", "title",
-              "mode", "service", "service_word", "service_hash", "ranges"}
+              "mode", "service", "service_word", "service_hash", "ranges",
+              "sso_url", "sso_machine_id", "sso_key"}
 # fixed time stamps keep the output reproducible
 FIXED_MTIME = 1767225600  # 2026-01-01
 FAT_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1
@@ -385,6 +391,10 @@ def check_conf(text):
             fail(f"unknown setting '{key}' (known: {', '.join(sorted(KNOWN_KEYS))})")
         if key == "service_hash" and value and not re.match(r"^sha512:\d+:[0-9a-fA-F]+:[0-9a-fA-F]+$", value):
             fail("service_hash must look like sha512:<iterations>:<salt hex>:<hash hex>")
+        if key == "sso_key" and not re.match(r"^([0-9a-fA-F]{2}){16,}$", value):
+            fail("sso_key must be at least 16 bytes in hex")
+        if key == "sso_url" and not re.match(r"^https?://[^\s/]+", value):
+            fail("sso_url must be an http(s) address")
 
 
 def effective(text):
@@ -527,6 +537,14 @@ def cmd_build(args):
                 fail(f"--set needs key=value, got {item}")
             key, value = (s.strip() for s in item.split("=", 1))
             conf += f"{key} = {value}\n"
+    machine = None
+    if args.sso_url or args.machine_id:
+        if not (args.sso_url and args.machine_id):
+            fail("--sso-url and --machine-id go together")
+        key = args.sso_key or os.urandom(32).hex()
+        conf = conf.rstrip("\n") + "\n\n# cakes-builder: unlock with a company account\n"
+        conf += f"sso_url = {args.sso_url}\nsso_machine_id = {args.machine_id}\nsso_key = {key}\n"
+        machine = {"machine_id": args.machine_id, "key": key, "sso_url": args.sso_url}
     check_conf(conf)
     overlay[CONF_PATH] = conf.encode("utf-8")
 
@@ -557,8 +575,16 @@ def cmd_build(args):
     with open(out + ".sha256", "w") as f:
         f.writelines(f"{d}  {n}\n" for d, n in digests)
     print(f"image: {out}")
+    if machine:
+        # the key signs this machine's QR codes: give it to the unlock server only
+        path = out + ".machine.json"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(machine, f, indent=2)
+            f.write("\n")
+        print(f"machine: {path} (import into the unlock server, keep it private)")
     for key, value in sorted(effective(conf).items()):
-        print(f"  {key} = {value}")
+        print(f"  {key} = {'(hidden)' if key == 'sso_key' else value}")
 
 
 def cmd_show(args):
@@ -582,7 +608,7 @@ def cmd_show(args):
     if conf:
         print("settings:")
         for key, value in sorted(effective(conf.decode("utf-8")).items()):
-            print(f"  {key} = {value}")
+            print(f"  {key} = {'(hidden)' if key == 'sso_key' else value}")
 
 
 def main():
@@ -596,6 +622,9 @@ def main():
     b.add_argument("--logo", help="PNG logo, scaled down to %d px if larger" % MAX_LOGO)
     b.add_argument("--file", action="append", metavar="SRC:/DEST", help="extra file for the overlay")
     b.add_argument("--gzip", action="store_true", help="also write .img.gz")
+    b.add_argument("--sso-url", help="unlock server for F2 / QR code unlock, docs/sso.md")
+    b.add_argument("--machine-id", help="this machine's id on the unlock server")
+    b.add_argument("--sso-key", help="machine key in hex, made up when not given")
     b.set_defaults(func=cmd_build)
     s = sub.add_parser("show", help="list files and settings of an image")
     s.add_argument("image")

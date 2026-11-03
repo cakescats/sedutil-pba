@@ -57,6 +57,11 @@ struct PbaConfig {
 	std::string service_word = "debug";
 	/** sha512:<iterations>:<salt hex>:<hash hex>, see tools/mkservicehash.py */
 	std::string service_hash;
+	/** unlock with a company account (docs/sso.md): the unlock server,
+	 *  this machine's id there and the key that signs the QR code */
+	std::string sso_url;
+	std::string sso_machine_id;
+	std::vector<uint8_t> sso_key;
 	/** warm, cold or keep (leave the kernel reboot= setting alone) */
 	std::string reboot = "warm";
 	bool logo = true;

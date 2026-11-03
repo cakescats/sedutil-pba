@@ -97,6 +97,8 @@ int PbaParseRangeList(const string &value, vector<int> &out)
 	return 0;
 }
 
+static bool fromHex(const string &hex, vector<uint8_t> &out);
+
 /** Apply one key. fromFile is false for kernel command line values,
  *  which may not touch the service shell settings. */
 static void setKey(PbaConfig &cfg, const string &key, const string &value, bool fromFile)
@@ -117,7 +119,10 @@ static void setKey(PbaConfig &cfg, const string &key, const string &value, bool 
 		ok = (value == "normal") || (value == "service");
 		if (ok) cfg.service_boot = (value == "service");
 	}
-	else if (!fromFile && ((key == "service") || (key == "service_word") || (key == "service_hash"))) {
+	else if (key == "sso_url") cfg.sso_url = value;
+	else if (key == "sso_machine_id") cfg.sso_machine_id = value;
+	else if (!fromFile && ((key == "service") || (key == "service_word") || (key == "service_hash") ||
+		(key == "sso_key"))) {
 		cfg.warnings.push_back("cakes." + key + " is ignored on the kernel command line");
 		return;
 	}
@@ -131,6 +136,11 @@ static void setKey(PbaConfig &cfg, const string &key, const string &value, bool 
 	}
 	else if (key == "service_word") cfg.service_word = value;
 	else if (key == "service_hash") cfg.service_hash = value;
+	else if (key == "sso_key") {
+		// at least 128 bits
+		ok = fromHex(value, cfg.sso_key) && (cfg.sso_key.size() >= 16);
+		if (!ok) cfg.sso_key.clear();
+	}
 	else {
 		cfg.warnings.push_back("unknown setting " + key);
 		return;

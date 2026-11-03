@@ -7,6 +7,7 @@
 #include "DtaHashPwd.h"
 #include "DtaDev.h"
 #include "PbaConfig.h"
+#include "PbaSso.h"
 
 sedutiloutput outputFormat = sedutilNormal;
 
@@ -114,10 +115,38 @@ static void testServicePassword(const char *serviceHash)
 	CHECK(!PbaCheckServicePassword(cfg, "svc-pass"));
 }
 
+static void testSso(const char *expected)
+{
+	std::vector<uint8_t> key;
+	for (int i = 0; i < 32; i++) key.push_back((uint8_t)i);
+	const uint8_t challenge[PBA_SSO_CHALLENGE] = { 1, 2, 3, 4 };
+	CHECK(PbaSsoToken(key, "ACME-0042", challenge) == expected);
+
+	std::ofstream("test-sso.conf") << "sso_url = https://unlock.example.com/\n"
+		"sso_machine_id = ACME 42\n"
+		"sso_key = 000102030405060708090a0b0c0d0e0f\n";
+	std::ofstream("test-sso-cmdline") << "cakes.sso_key=ffffffffffffffffffffffffffffffff\n";
+	PbaConfig cfg;
+	PbaLoadConfig(cfg, "test-sso.conf", "test-sso-cmdline");
+	CHECK(PbaSsoEnabled(cfg));
+	CHECK(cfg.sso_key.size() == 16 && cfg.sso_key[15] == 0x0f); /* not from the command line */
+	std::string url, code;
+	CHECK(PbaSsoMake(cfg, url, code));
+	CHECK(url.compare(0, 41, "https://unlock.example.com/m/ACME%2042?c=") == 0 && url.size() == 41 + 16);
+	CHECK(code.size() == 19 && code[4] == '-' && code[9] == '-' && code[14] == '-');
+
+	std::ofstream("test-sso.conf") << "sso_url = https://x\nsso_machine_id = a\nsso_key = 0011\n";
+	PbaConfig shortKey;
+	PbaLoadConfig(shortKey, "test-sso.conf", "/nonexistent");
+	CHECK(!PbaSsoEnabled(shortKey)); /* under 128 bits */
+	remove("test-sso.conf");
+	remove("test-sso-cmdline");
+}
+
 int main(int argc, char **argv)
 {
-	if (argc != 4) {
-		printf("usage: %s <sha1 hex> <sha512 hex> <service_hash>\n", argv[0]);
+	if (argc != 5) {
+		printf("usage: %s <sha1 hex> <sha512 hex> <service_hash> <sso token>\n", argv[0]);
 		return 2;
 	}
 	CLog::Level() = CLog::FromInt(2);
@@ -127,6 +156,7 @@ int main(int argc, char **argv)
 	testDriveHash(argv[1], argv[2]);
 	testConfig();
 	testServicePassword(argv[3]);
+	testSso(argv[4]);
 	printf(failures ? "%d host test(s) FAILED\n" : "host tests passed\n", failures);
 	return failures ? 1 : 0;
 }

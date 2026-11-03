@@ -43,6 +43,39 @@ jobs:
           name: sedutil-cli
           path: cli/
 
+  windows-cli:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: microsoft/setup-msbuild@v2
+      - name: Version header
+        shell: bash
+        run: |
+          if ver=$(git describe --tags --match 'v*' --dirty 2>/dev/null); then
+            ver=${ver#v}
+          else
+            ver="$(cat VERSION)+g$(git rev-parse --short HEAD)"
+          fi
+          echo "#define GIT_VERSION \"$ver\"" > windows/Version.h
+      - name: Build sedutil-cli.exe
+        run: >
+          msbuild windows\CLI\CLI.sln /m /p:Configuration=Release /p:Platform=x64
+          /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0
+          /p:PreBuildEventUseInBuild=false
+      - name: Check and package
+        shell: bash
+        run: |
+          exe=$(find windows -name sedutil-cli.exe -path '*Release*' | head -n 1)
+          "$exe" --validatePBKDF2 | tail -n 1
+          mkdir cli && cp "$exe" cli/sedutil-cli-windows-x64.exe
+          (cd cli && sha256sum sedutil-cli-windows-x64.exe > sedutil-cli-windows-x64.exe.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sedutil-cli-windows
+          path: cli/
+
   image:
     needs: host-tests
     runs-on: ubuntu-24.04
@@ -90,13 +123,16 @@ jobs:
         run: |
           img=$(ls dist/cakes-pba-*-${{ matrix.profile }}.img.gz)
           mkdir -p builder-test
+          key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
           tools/cakes-builder.py build -i "$img" -o builder-test/custom.img \
-            --set "title=Builder test" --set timeout=10 --logo branding/logo.png
+            --set "title=Builder test" --set timeout=10 --logo branding/logo.png \
+            --sso-url https://unlock.example.com --machine-id CI-0001 --sso-key $key
           tools/cakes-builder.py show builder-test/custom.img
           # the rebuilt FAT must be clean
           dd if=builder-test/custom.img of=builder-test/esp.fat bs=1M skip=1 count=30 status=none
           fsck.fat -n builder-test/esp.fat
-          SHOT_WAIT=60 scripts/qemu-smoke.sh builder-test/custom.img builder-test/qemu-smoke
+          # also presses F2 and checks the QR code's token
+          SSO_KEY=$key SHOT_WAIT=60 scripts/qemu-smoke.sh builder-test/custom.img builder-test/qemu-smoke
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -110,7 +146,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: image
+    needs: [image, windows-cli]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -131,4 +167,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "CakesCats PBA $GITHUB_REF_NAME" --notes "See README for how to install." \
             dist/*.img.gz dist/*.sha256 sedutil-cli-linux-x86_64 sedutil-cli-linux-x86_64.sha256 \
-            tools/cakes-builder.py
+            sedutil-cli-windows-x64.exe sedutil-cli-windows-x64.exe.sha256 tools/cakes-builder.py

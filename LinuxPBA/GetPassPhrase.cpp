@@ -84,13 +84,20 @@ static int readByte()
 	return ch;
 }
 
-/** Read one key. Escape sequences (arrows, F-keys) come back as 27. */
+/** Read one key. F2 comes back as PBA_KEY_F2, other escape sequences
+ *  (arrows, F-keys) and Esc itself as 27. */
 static int readKey()
 {
 	int ch = readByte();
 	if (27 == ch) {
-		// swallow the rest of an escape sequence
-		while (inputReady(30)) readByte();
+		string seq;
+		while (inputReady(30)) {
+			int next = readByte();
+			if (next < 0) break;
+			seq += (char)next;
+		}
+		// Linux console, xterm and VT220 spellings of F2
+		if ((seq == "[[B") || (seq == "OQ") || (seq == "[12~")) return PBA_KEY_F2;
 	}
 	return ch;
 }
@@ -124,6 +131,11 @@ PassPhraseResult GetPassPhrase(const char *prompt, string &password, bool show_a
 			password.clear();
 			printf("\n");
 			return PASSPHRASE_ESCAPE;
+		}
+		if (PBA_KEY_F2 == ch) {
+			password.clear();
+			printf("\n");
+			return PASSPHRASE_F2;
 		}
 		if ((BACKSPACE == ch) || (CTRL_H == ch)) {
 			if (password.length() != 0) {

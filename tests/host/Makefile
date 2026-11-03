@@ -7,7 +7,7 @@ CXXFLAGS := -std=c++11 -Wall -Werror -O2
 CFLAGS := -std=c11 -Wall -Werror -O2
 PBKDF2 := blockwise.c chash.c hmac.c pbkdf2.c sha1.c sha512.c
 
-OBJS := test_main.o DtaHashPwd.o PbaConfig.o $(PBKDF2:.c=.o)
+OBJS := test_main.o DtaHashPwd.o PbaConfig.o PbaSso.o $(PBKDF2:.c=.o)
 
 vpath %.cpp $(TOP)/Common $(TOP)/LinuxPBA
 vpath %.c $(TOP)/Common/pbkdf2

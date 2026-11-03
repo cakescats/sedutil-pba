@@ -42,8 +42,15 @@ public:
 	~PbaScreen();
 	/** Set up palette and load the logo, a binary PPM (P6) file */
 	void init(bool logo, const std::string &logoFile);
-	/** Clear the screen, draw the logo and put the cursor under it */
-	void clear();
+	/** Clear the screen, draw the logo unless logo is false and put the
+	 *  cursor under it. Returns the text row the cursor is on. */
+	int clear(bool logo = true);
+	/** Draw text as a QR code with its top at text row row, at most
+	 *  maxRows rows high. Returns the rows it covers, 0 without a
+	 *  framebuffer or room. */
+	int drawQR(const std::string &text, int row, int maxRows);
+	/** Console height in characters */
+	int rows() const { return nrows; }
 	/** Console width in characters */
 	int cols() const { return ncols; }
 	/** Print text centred on the current line */
@@ -53,6 +60,7 @@ public:
 private:
 	bool loadPPM(const std::string &file);
 	void drawLogo();
+	void fillRect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t rgb[3]);
 	void unmapFramebuffer();
 
 	int ncols, nrows, charHeight;

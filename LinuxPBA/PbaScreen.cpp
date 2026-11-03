@@ -25,6 +25,7 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/mman.h>
 #include <linux/fb.h>
 #include <fstream>
+#include "qrcodegen/qrcodegen.hpp"
 
 using namespace std;
 
@@ -109,7 +110,6 @@ void PbaScreen::init(bool logo, const string &logoFile)
 	printf("\033[9;0]\033[14;0]\033[?25l" PBA_C_TEXT);
 	fflush(stdout);
 
-	if (!logo || !loadPPM(logoFile)) return;
 	fbfd = open("/dev/fb0", O_RDWR);
 	if (fbfd < 0) return;
 	struct fb_var_screeninfo vinfo;
@@ -136,6 +136,8 @@ void PbaScreen::init(bool logo, const string &logoFile)
 	fb = (uint8_t *)p;
 	charHeight = (int)(yres / nrows);
 	if (charHeight < 8) charHeight = 16;
+
+	if (!logo || !loadPPM(logoFile)) return;
 	// 96px logo: 2x for 8x16 fonts, 4x for the 16x32 font used on 4K panels
 	logoScale = 2 * charHeight / 16;
 	if (logoScale < 1) logoScale = 1;
@@ -144,38 +146,76 @@ void PbaScreen::init(bool logo, const string &logoFile)
 	// keep enough rows for the drive list and prompt
 	if ((logoRows > nrows - 14) || ((uint32_t)(logoW * logoScale) > xres)) {
 		logoRows = 0;
-		unmapFramebuffer();
+		logoW = 0;
+	}
+}
+
+void PbaScreen::fillRect(uint32_t x0, uint32_t y0, uint32_t w, uint32_t h, const uint8_t rgb[3])
+{
+	uint32_t v = ((uint32_t)(rgb[0] >> (8 - rlen)) << roff) |
+		((uint32_t)(rgb[1] >> (8 - glen)) << goff) |
+		((uint32_t)(rgb[2] >> (8 - blen)) << boff);
+	for (uint32_t y = y0; (y < y0 + h) && (y < yres); y++) {
+		uint8_t *row = fb + (size_t)y * stride;
+		for (uint32_t x = x0; (x < x0 + w) && (x < xres); x++)
+			memcpy(row + (size_t)x * bpp, &v, bpp); // little endian framebuffer
 	}
 }
 
 void PbaScreen::drawLogo()
 {
-	if (!fb) return;
+	if (!fb || !logoW) return;
 	uint32_t x0 = (xres - logoW * logoScale) / 2;
 	uint32_t y0 = charHeight;
-	for (int y = 0; y < logoH * logoScale; y++) {
-		uint8_t *row = fb + (size_t)(y0 + y) * stride + (size_t)x0 * bpp;
-		const uint8_t *src = logoRGB.data() + (size_t)(y / logoScale) * logoW * 3;
-		for (int x = 0; x < logoW * logoScale; x++) {
-			const uint8_t *px = src + (x / logoScale) * 3;
-			uint32_t v = ((uint32_t)(px[0] >> (8 - rlen)) << roff) |
-				((uint32_t)(px[1] >> (8 - glen)) << goff) |
-				((uint32_t)(px[2] >> (8 - blen)) << boff);
-			memcpy(row + (size_t)x * bpp, &v, bpp); // little endian framebuffer
-		}
+	for (int y = 0; y < logoH; y++) {
+		const uint8_t *src = logoRGB.data() + (size_t)y * logoW * 3;
+		for (int x = 0; x < logoW; x++)
+			fillRect(x0 + x * logoScale, y0 + y * logoScale, logoScale, logoScale, src + x * 3);
 	}
 }
 
-void PbaScreen::clear()
+int PbaScreen::clear(bool logo)
 {
 	printf(PBA_C_RESET "\033[2J\033[H" PBA_C_TEXT);
 	fflush(stdout);
 	// let fbcon finish clearing before drawing over it
 	usleep(20000);
-	drawLogo();
-	printf("\033[%d;1H", logoRows + 1);
-	if (!logoRows) printf("\n");
+	int row = 2;
+	if (logo && logoRows) {
+		drawLogo();
+		row = logoRows + 1;
+	}
+	printf("\033[%d;1H", row);
 	fflush(stdout);
+	return row;
+}
+
+int PbaScreen::drawQR(const string &text, int row, int maxRows)
+{
+	if (!fb || (maxRows < 4)) return 0;
+	qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText("", qrcodegen::QrCode::Ecc::LOW);
+	try {
+		qr = qrcodegen::QrCode::encodeText(text.c_str(), qrcodegen::QrCode::Ecc::MEDIUM);
+	}
+	catch (const std::exception &) {
+		return 0; // longer than a QR code holds
+	}
+	// four modules of white quiet zone around it, as scanners expect
+	int modules = qr.getSize() + 8;
+	int px = (maxRows * charHeight) / modules;
+	if ((uint32_t)(px * modules) > xres) px = xres / modules;
+	if (px > 12) px = 12;
+	if (px < 2) return 0;
+	static const uint8_t white[3] = { 255, 255, 255 }, black[3] = { 0, 0, 0 };
+	uint32_t side = px * modules;
+	uint32_t x0 = (xres - side) / 2;
+	uint32_t y0 = (row - 1) * charHeight;
+	fillRect(x0, y0, side, side, white);
+	for (int y = 0; y < qr.getSize(); y++)
+		for (int x = 0; x < qr.getSize(); x++)
+			if (qr.getModule(x, y))
+				fillRect(x0 + (x + 4) * px, y0 + (y + 4) * px, px, px, black);
+	return (side + charHeight - 1) / charHeight;
 }
 
 void PbaScreen::centered(const string &text, const char *color)

@@ -22,7 +22,7 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #include <iomanip>
 #include <cstdlib>
 #include <cstring>
-#include <strings.h>
+#include <cctype>
 #include "DtaHashPwd.h"
 #include "DtaLexicon.h"
 #include "DtaOptions.h"
@@ -51,15 +51,23 @@ void DtaGetHashConfig(DtaHashAlg *alg, unsigned int *iter)
 	*iter = hashIter;
 }
 
+/** Case-insensitive compare of exactly n characters, strncasecmp is not in MSVC */
+static bool sameName(const char *a, const char *b, size_t n)
+{
+	for (size_t i = 0; i < n; i++)
+		if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) return false;
+	return true;
+}
+
 int DtaParseHashSpec(const char *spec, DtaHashAlg *alg, unsigned int *iter)
 {
 	const char *colon = strchr(spec, ':');
 	size_t namelen = colon ? (size_t)(colon - spec) : strlen(spec);
-	if ((4 == namelen) && !strncasecmp(spec, "sha1", 4)) {
+	if ((4 == namelen) && sameName(spec, "sha1", 4)) {
 		*alg = DTA_HASH_SHA1;
 		*iter = 75000;
 	}
-	else if ((6 == namelen) && !strncasecmp(spec, "sha512", 6)) {
+	else if ((6 == namelen) && sameName(spec, "sha512", 6)) {
 		*alg = DTA_HASH_SHA512;
 		*iter = 500000;
 	}

@@ -26,6 +26,7 @@ using namespace std;
 typedef enum _PassPhraseResult {
 	PASSPHRASE_ENTERED, /**< Enter was pressed */
 	PASSPHRASE_ESCAPE,  /**< Esc was pressed, nothing returned */
+	PASSPHRASE_F2,      /**< F2 was pressed, nothing returned */
 } PassPhraseResult;
 
 /** Read a pass-phrase from the console without echo.
@@ -37,10 +38,13 @@ PassPhraseResult GetPassPhrase(const char *prompt, string &password, bool show_a
 	const string &initial = "");
 string GetPassPhrase(const char *prompt, bool show_asterisk = true);
 
+/** Key code WaitKey and the pass-phrase reader use for F2 */
+#define PBA_KEY_F2 0x102
+
 /** Wait for a key press.
  * @param seconds how long to wait, -1 waits forever
  * @param tick called once a second with the seconds left, may be NULL
- * @return the key pressed (27 for Esc and function keys) or -1 on timeout
+ * @return the key pressed (27 for Esc and function keys, PBA_KEY_F2) or -1 on timeout
  */
 int WaitKey(int seconds, void (*tick)(int left, void *ctx) = NULL, void *ctx = NULL, bool drain = true);
 

@@ -32,6 +32,7 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #include "UnlockSEDs.h"
 #include "PbaConfig.h"
 #include "PbaScreen.h"
+#include "PbaSso.h"
 
 using namespace std;
 
@@ -158,6 +159,38 @@ static void countdownTick(int left, void *ctx)
 	fflush(stdout);
 }
 
+/** The QR code for unlocking with a company account, until a key is pressed */
+static void showSso(const PbaConfig &cfg)
+{
+	string url, code;
+	if (!PbaSsoMake(cfg, url, code)) return;
+	kmsg("sso: " + url);
+	int row = screen.clear(false);
+	screen.centered(cfg.title, PBA_C_BRAND);
+	printf("\n");
+	screen.centered("Unlock with your company account", PBA_C_BRIGHT);
+	screen.centered("Scan the code with your phone and sign in.", PBA_C_TEXT);
+	screen.centered("The page shows the password to type here.", PBA_C_TEXT);
+	printf("\n");
+	row += 6;
+	// lines printed under the code
+	const int below = 6;
+	int used = screen.drawQR(url, row, screen.rows() - row - below);
+	for (int i = 0; i < used; i++) printf("\n");
+	if (!used) screen.centered(url, PBA_C_BRIGHT);
+	printf("\n");
+	string site = cfg.sso_url;
+	size_t scheme = site.find("://");
+	if (scheme != string::npos) site.erase(0, scheme + 3);
+	while (!site.empty() && (site[site.size() - 1] == '/')) site.erase(site.size() - 1);
+	screen.centered("No camera? Open " + site + " and enter", PBA_C_MUTED);
+	screen.centered(cfg.sso_machine_id + "   " + code, PBA_C_BRIGHT);
+	printf("\n");
+	screen.centered("Press any key to go back", PBA_C_MUTED);
+	fflush(stdout);
+	WaitKey(-1);
+}
+
 static void bootOS(const PbaConfig &cfg, vector<PbaDrive> &drives)
 {
 	string message;
@@ -219,6 +252,7 @@ int main(int argc, char** argv) {
 				PBA_SERVICE_OFF == cfg.service ? "" : "   S: service shell");
 			int key = WaitKey(-1);
 			if (('r' == key) || ('R' == key)) drives = ScanSEDs();
+			else if ((PBA_KEY_F2 == key) && PbaSsoEnabled(cfg)) showSso(cfg);
 			else if ((('s' == key) || ('S' == key)) && (PBA_SERVICE_OFF != cfg.service)) {
 				if (serviceAllowed(cfg, message)) enterService();
 			}
@@ -235,9 +269,16 @@ int main(int argc, char** argv) {
 		if (unlocked)
 			printf("  " PBA_C_MUTED "Enter on an empty line or Esc starts the OS with the remaining drives locked"
 				PBA_C_TEXT "\n\n");
+		if (PbaSsoEnabled(cfg))
+			printf("  " PBA_C_MUTED "Forgot the password? F2 unlocks with your company account"
+				PBA_C_TEXT "\n\n");
 		PassPhraseResult res = GetPassPhrase(unlocked ? "  Password for the remaining drives: " : "  Password: ",
 			password, true, typed);
 		wipe(typed);
+		if (PASSPHRASE_F2 == res) {
+			if (PbaSsoEnabled(cfg)) showSso(cfg);
+			continue;
+		}
 		if ((PASSPHRASE_ESCAPE == res) || password.empty()) {
 			if (unlocked) bootOS(cfg, drives);
 			continue;

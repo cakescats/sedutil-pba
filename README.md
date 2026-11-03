@@ -106,6 +106,14 @@ make -C tests/host check
 
 Or use the `Dockerfile`. The image ends up in `dist/`.
 
+## For companies
+
+Unlocking with a company account (SSO via a QR code), the unlock server and
+MDM rollout (Intune, Ansible) are in
+[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise).
+The PBA side is in this image, and stays off unless the builder turns it on:
+see [docs/sso.md](docs/sso.md).
+
 ## Roadmap
 
 Planned: a configurator and skins, OPAL tools for Windows and Linux, PIN

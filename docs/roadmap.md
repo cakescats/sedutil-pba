@@ -96,22 +96,22 @@ overlay mechanism and the builder are done.
 
 ### Corporate unlock
 
-- **SSO through a QR code.** The PBA brings up the network (the drivers
-  already ship as modules), shows a QR code and starts an OAuth 2.0 device
-  authorization flow with the company IdP (Entra ID, Okta, Keycloak). The user
-  signs in on a phone. A small self-hosted unlock server checks the policy and
-  returns the drive secret, wrapped for this machine with a TPM-bound key or a
-  per-machine key.
+This now lives in
+[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise).
+
+- **Done:** SSO through a QR code ([sso.md](sso.md)). F2 in the PBA shows a
+  signed one-time code, and the unlock server shows the password after an
+  OpenID Connect sign-in. MDM rollout scripts and guides are done too.
+- **TPM 2.0:** keep the machine key, and later the drive secret, sealed to
+  the PBA's measured boot. The QR code then proves the machine itself, not
+  only its drive, and the PBA can derive the password or a one-time code from
+  the TPM.
+- **Smart cards and NFC:** a PIV or OpenPGP card in a USB reader, or a phone
+  over NFC, as a second factor or in place of the password.
 - **Network unlock:** on a trusted LAN, unlock without user input, like
   BitLocker Network Unlock.
-- **Fallbacks:** a recovery password and offline unlock when there is no network.
-- **Pieces:**
-  - network setup in the PBA (DHCP, TLS with a pinned CA);
-  - the unlock server and its API;
-  - enrolment from the running OS;
-  - an audit log;
-  - corporate skins.
-- Write a design document first.
+- **Mobile app:** approve an unlock with one tap, and the PBA fetches the key
+  over the network.
 
 ### OS helpers for sleep
 
