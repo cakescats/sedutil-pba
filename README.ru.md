@@ -40,11 +40,15 @@ PBA запускается только при холодной загрузке
 
 ## Для компаний
 
-Разблокировка через корпоративный аккаунт (SSO по QR-коду), сервер
-разблокировки и развёртывание через MDM (Intune, Ansible) — в
-[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise).
-Поддержка в самом PBA есть в обычном образе и выключена, пока её не включит
-билдер ([docs/sso.md](docs/sso.md)).
+Интеграция с корпоративными системами — в
+[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise):
+
+- вход через корпоративный SSO (Entra ID, Okta, Google, Keycloak);
+- развёртывание и конфигурация через MDM (Intune, Ansible);
+- центральный сервер с правами доступа по машинам и журналом аудита.
+
+Поддержка в самом PBA есть в обычном образе и выключена, пока её не
+настроит билдер ([docs/sso.md](docs/sso.md)).
 
 ## Сборка
 

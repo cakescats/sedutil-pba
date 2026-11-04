@@ -99,7 +99,7 @@ overlay mechanism and the builder are done.
 This now lives in
 [cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise).
 
-- **Done:** SSO through a QR code ([sso.md](sso.md)). F2 in the PBA shows a
+- **Done:** SSO and MDM integration ([sso.md](sso.md)): the PBA hands off to the company SSO through a QR code. F2 in the PBA shows a
   signed one-time code, and the unlock server shows the password after an
   OpenID Connect sign-in. MDM rollout scripts and guides are done too.
 - **TPM 2.0:** keep the machine key, and later the drive secret, sealed to

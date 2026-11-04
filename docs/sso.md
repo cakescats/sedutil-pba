@@ -1,10 +1,15 @@
-# Unlocking with a company account
+# Corporate integration: SSO and MDM (PBA side)
 
-The PBA can show a QR code that leads to the company's unlock server. The
-user signs in there with the company account (Entra ID, Okta, Google,
-Keycloak or any OpenID Connect provider) and gets the password to type in.
-This replaces the call to the helpdesk. The PBA needs no network for it, and
-no clock.
+A company configures the PBA centrally and connects it to its own systems:
+
+- **SSO.** The company's sign-in (Entra ID, Okta, Google, Keycloak or any
+  OpenID Connect provider) decides who may open a machine, instead of a
+  helpdesk reading out passwords.
+- **MDM.** The same tools that manage the fleet roll out the PBA and its
+  configuration.
+
+The PBA hands a request over to SSO through a QR code on F2. The phone
+carries the sign-in, so the PBA needs no network and no clock.
 
 The unlock server, MDM rollout scripts and the corporate docs live in
 **[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise)**.

@@ -108,11 +108,15 @@ Or use the `Dockerfile`. The image ends up in `dist/`.
 
 ## For companies
 
-Unlocking with a company account (SSO via a QR code), the unlock server and
-MDM rollout (Intune, Ansible) are in
-[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise).
-The PBA side is in this image, and stays off unless the builder turns it on:
-see [docs/sso.md](docs/sso.md).
+Integration with corporate systems lives in
+[cakescats/sedutil-opal-enterprise](https://github.com/cakescats/sedutil-opal-enterprise):
+
+- sign-in with the company SSO (Entra ID, Okta, Google, Keycloak);
+- rollout and configuration through MDM (Intune, Ansible);
+- a central server with per-machine access rules and an audit log.
+
+The PBA side of it is in this image and stays off unless the builder
+configures it. See [docs/sso.md](docs/sso.md).
 
 ## Roadmap
 
