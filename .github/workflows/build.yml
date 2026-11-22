@@ -135,6 +135,14 @@ jobs:
           # also presses F2 and checks the QR code's token
           SSO_KEY=$key SHOT_WAIT=60 scripts/qemu-smoke.sh builder-test/custom.img builder-test/qemu-smoke
 
+      # just the boot image, ready for --loadPBAimage or the GUI
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pba-image-${{ matrix.profile }}
+          path: |
+            dist/*.img
+            dist/*.sha256
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -167,5 +175,5 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "CakesCats PBA $GITHUB_REF_NAME" --notes "See README for how to install." \
-            dist/*.img.gz dist/*.sha256 sedutil-cli-linux-x86_64 sedutil-cli-linux-x86_64.sha256 \
+            dist/*.img dist/*.img.gz dist/*.sha256 sedutil-cli-linux-x86_64 sedutil-cli-linux-x86_64.sha256 \
             sedutil-cli-windows-x64.exe sedutil-cli-windows-x64.exe.sha256 tools/cakes-builder.py
