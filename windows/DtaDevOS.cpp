@@ -172,6 +172,23 @@ int DtaDevOS::diskScan()
 	printf("No more disks present ending scan\n");
 	return 0;
 }
+/* Every PhysicalDriveN that exists. Opening with no access rights needs no
+ * administrator, so a drive the user may not open still shows up, and a
+ * gap in the numbering (a drive removed) does not end the list. */
+std::vector<std::string> DtaDevOS::deviceNames()
+{
+	std::vector<std::string> names;
+	char devname[25];
+	for (int i = 0; i < MAX_DISKS; i++) {
+		sprintf_s(devname, 23, "\\\\.\\PhysicalDrive%i", i);
+		HANDLE h = CreateFileA(devname, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+			NULL, OPEN_EXISTING, 0, NULL);
+		if (h == INVALID_HANDLE_VALUE) continue;
+		CloseHandle(h);
+		names.push_back(devname);
+	}
+	return names;
+}
 /** Close the filehandle so this object can be delete. */
 
 DtaDevOS::~DtaDevOS()

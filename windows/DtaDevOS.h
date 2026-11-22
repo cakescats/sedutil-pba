@@ -20,6 +20,8 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 #include "DtaDev.h"
 #include "DtaDiskType.h"
+#include <string>
+#include <vector>
 /** Windows specific implementation of DtaDevOS.
  * Uses the ATA_PASSTHROUGH_DIRECT ioctls to send commands to the 
  * device 
@@ -56,6 +58,8 @@ public:
 	unsigned long long	getSize();
 	/** A static class to scan for supported drives */
 	static int diskScan();
+	/** Paths of the drives --scan looks at */
+	static std::vector<std::string> deviceNames();
 protected:
      /** OS specific command to Wait for specified number of milliseconds 
      * @param milliseconds  number of milliseconds to wait

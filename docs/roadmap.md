@@ -128,6 +128,8 @@ S3 was confirmed to lock the drive on a desktop, see
 
 - A command line tool for Windows and Linux: status, passwords, loading the
   PBA, PSID revert, sleep helpers. A GUI later.
+  - Done: `sedutil-cli -j` (JSON result on stdout) and `-S` (passwords on
+    stdin), the interface a GUI runs it through. See [json.md](json.md).
 
 ### Native UEFI PBA (Rust)
 

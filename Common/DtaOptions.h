@@ -44,6 +44,7 @@ typedef struct _DTA_OPTIONS {
 	uint8_t lrlength;		/** the length in blocks of a lockingrange */
 
 	bool no_hash_passwords; /** global parameter, disables hashing of passwords */
+	bool password_stdin; /** -S: password arguments given as "-" are read from stdin */
 	sedutiloutput output_format;
 } DTA_OPTIONS;
 /** Print a usage message */

@@ -25,6 +25,7 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #include<iomanip>
 #include "DtaDevEnterprise.h"
 #include "DtaHashPwd.h"
+#include "DtaJson.h"
 #include "DtaEndianFixup.h"
 #include "DtaStructures.h"
 #include "DtaCommand.h"
@@ -641,6 +642,7 @@ uint8_t DtaDevEnterprise::listLockingRanges(char * password, int16_t rangeid)
     set8(table, OPALUID[OPAL_LOCKINGRANGE_GLOBAL]);
 
     uint16_t start = (rangeid == -1)? 0: rangeid;
+	DtaJson::Arr jsonRanges;
 	for (uint16_t i = start; i <= MaxRanges; i++)
     {
 		uint8_t curRC = 0;
@@ -729,6 +731,24 @@ uint8_t DtaDevEnterprise::listLockingRanges(char * password, int16_t rangeid)
                                         && response.tokenIs(5+4*8+1) == DTA_TOKENID_UINT;
         delete session;
 
+		if (DtaJson::enabled()) {
+			// the reset types in the LockOnReset list, named as for Opal
+			DtaJson::Arr lor;
+			static const char *resetNames[] = { "PowerCycle", "HardwareReset", "HotPlug", "Programmatic" };
+			for (uint32_t t = 5 + 4 * 8 + 1; LockOnReset && t < response.getTokenCount()
+					&& response.tokenIs(t) == DTA_TOKENID_UINT; t++) {
+				const uint8_t type = response.getUint8(t);
+				lor.str(type < 4 ? resetNames[type] : std::to_string(type));
+			}
+			jsonRanges.add(DtaJson::Obj().u("range", i).str("name", Name).str("commonName", CommonName)
+				.u("start", RangeStart).u("length", RangeLength)
+				.b("readLockEnabled", ReadLockEnabled).b("writeLockEnabled", WriteLockEnabled)
+				.b("readLocked", ReadLocked).b("writeLocked", WriteLocked)
+				.raw("lockOnReset", lor.done()).done());
+			one_succeeded = 1;
+			continue;
+		}
+
 		if (output_format == sedutilReadable) {
 			LOG(I) << "Band[" << i << "]: ";
 		}
@@ -746,6 +766,7 @@ uint8_t DtaDevEnterprise::listLockingRanges(char * password, int16_t rangeid)
 		one_succeeded = 1;
 	}
 
+	if (DtaJson::enabled()) DtaJson::set("ranges", jsonRanges.done());
 	// If we're getting the list of ranges and none succeed, that is an error.
 	// If we're getting one range, return any failure.
 	if (((rangeid == -1) && (one_succeeded == 0))
@@ -1302,7 +1323,8 @@ uint8_t DtaDevEnterprise::printDefaultPassword()
 		return rc;
 	}
 	string defaultPassword = response.getString(5);
-    fprintf(stdout, "MSID: %s\n", (char *)defaultPassword.c_str());
+	if (DtaJson::enabled()) DtaJson::set("msid", DtaJson::quote(defaultPassword));
+	else fprintf(stdout, "MSID: %s\n", (char *)defaultPassword.c_str());
     return 0;
 }
 uint8_t DtaDevEnterprise::setSIDPassword(char * oldpassword, char * newpassword,
@@ -1459,7 +1481,7 @@ uint8_t DtaDevEnterprise::exec(DtaCommand * cmd, DtaResponse & resp, uint8_t pro
     rc = sendCmd(IF_SEND, protocol, comID(), cmd->getCmdBuffer(), cmd->outputBufferSize());
     if (0 != rc) {
         LOG(E) << "Command failed on send " << (uint16_t) rc;
-        return rc;
+        return DTAERROR_IO;
     }
     hdr = (OPALHeader *) cmd->getRespBuffer();
     do {
@@ -1475,7 +1497,7 @@ uint8_t DtaDevEnterprise::exec(DtaCommand * cmd, DtaResponse & resp, uint8_t pro
     IFLOG(D3) DtaHexDump(cmd->getRespBuffer(), SWAP32(hdr->cp.length) + sizeof (OPALComPacket));
     if (0 != rc) {
         LOG(E) << "Command failed on recv, returned " << (uint16_t) rc;
-        return rc;
+        return DTAERROR_IO;
     }
     resp.init(cmd->getRespBuffer());
     return 0;

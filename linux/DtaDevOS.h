@@ -20,6 +20,8 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 #include "DtaDev.h"
 #include "DtaDevLinuxDrive.h"
+#include <string>
+#include <vector>
 
 /** Linux specific implementation of DtaDevOS.
  */
@@ -49,6 +51,8 @@ public:
             void * buffer, uint32_t bufferlen);
     /** A static class to scan for supported drives */
     static int diskScan();
+    /** Paths of the drives --scan looks at */
+    static std::vector<std::string> deviceNames();
 protected:
     /** OS specific command to Wait for specified number of milliseconds 
      * @param ms  number of milliseconds to wait
