@@ -77,47 +77,6 @@ jobs:
           name: sedutil-cli-windows
           path: cli/
 
-  # CakesCats Drives (gui/): the Tauri GUI with this sedutil-cli.exe inside, as an MSI
-  windows-gui:
-    needs: windows-cli
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: sedutil-cli-windows
-          path: cli
-      - name: Put sedutil-cli.exe where the bundle takes it from
-        shell: bash
-        run: |
-          mkdir -p gui/src-tauri/binaries
-          cp cli/sedutil-cli-windows-x64.exe gui/src-tauri/binaries/sedutil-cli-x86_64-pc-windows-msvc.exe
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: gui/src-tauri -> target
-      - name: Icons from the logo
-        shell: bash
-        working-directory: gui
-        run: npx --yes @tauri-apps/cli@2 icon icon-source.png -o src-tauri/icons
-      - name: Build the MSI
-        shell: bash
-        working-directory: gui
-        run: npx --yes @tauri-apps/cli@2 build
-      - name: Collect
-        shell: bash
-        run: |
-          mkdir msi
-          cp gui/src-tauri/target/release/bundle/msi/*.msi msi/
-          (cd msi && sha256sum *.msi > SHA256SUMS)
-          ls -l msi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cakes-drives-windows-msi
-          path: msi/
-
   image:
     needs: host-tests
     runs-on: ubuntu-24.04

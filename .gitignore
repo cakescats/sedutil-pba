@@ -204,12 +204,6 @@ windows/installer/exe
 tests/host/test_host
 tests/host/test_host.log
 tests/host/sedutil-cli-fake
-# GUI: build output and files CI generates
-gui/src-tauri/target/
-gui/src-tauri/gen/
-gui/src-tauri/icons/
-gui/src-tauri/binaries/
-gui/dev/preview.html
 tests/host/Version.h
 tests/host/*.o
 __pycache__/
