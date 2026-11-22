@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CakesCats Drives</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <img src="logo.png" alt="" class="logo">
+    <h1>CakesCats Drives</h1>
+    <span class="spacer"></span>
+    <label class="hash">
+      <span data-t="hashLabel"></span>
+      <select id="hash">
+        <option value="">SHA-1 (sedutil 1.x)</option>
+        <option value="sha512">SHA-512</option>
+      </select>
+    </label>
+    <button id="refresh" class="btn" data-t="refresh"></button>
+  </header>
+
+  <main class="layout">
+    <aside class="drives">
+      <div class="drives-head" data-t="drives"></div>
+      <ul id="driveList" class="drive-list"></ul>
+      <p id="scanNote" class="muted small"></p>
+    </aside>
+    <section id="detail" class="detail"></section>
+  </main>
+
+  <details id="logBox" class="log">
+    <summary><span data-t="log"></span> <span id="logStatus" class="small muted"></span></summary>
+    <pre id="logText"></pre>
+  </details>
+
+  <div id="busy" class="busy" hidden>
+    <div class="busy-card">
+      <div class="spinner"></div>
+      <div id="busyText"></div>
+      <div id="progressWrap" class="progress" hidden><div id="progressBar"></div></div>
+      <div id="progressText" class="small muted"></div>
+    </div>
+  </div>
+
+  <dialog id="dialog" class="dialog">
+    <form method="dialog" id="dialogForm">
+      <h2 id="dialogTitle"></h2>
+      <p id="dialogText" class="dialog-text"></p>
+      <div id="dialogFields"></div>
+      <p id="dialogError" class="error" hidden></p>
+      <div class="dialog-buttons">
+        <button type="button" id="dialogCancel" class="btn" data-t="cancel"></button>
+        <button type="submit" id="dialogOk" class="btn primary"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
