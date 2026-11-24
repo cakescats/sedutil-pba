@@ -32,6 +32,10 @@ void usage()
     printf("-v (optional)                       increase verbosity, one to five v's\n");
     printf("-n (optional)                       no password hashing. Passwords will be sent in clear text!\n");
     printf("-l (optional)                       log style output to stderr only\n");
+    printf("-j (optional)                       print one JSON object to stdout, everything else\n");
+    printf("                                    to stderr (see docs/json.md)\n");
+    printf("-S (optional)                       read each password given as - from stdin, one\n");
+    printf("                                    per line; on a terminal without echo\n");
     printf("-H <sha1|sha512>[:iterations] (optional)\n");
     printf("                                    password hash, default sha1:75000 (sedutil 1.x)\n");
     printf("                                    sha512 defaults to 500000 iterations\n");
@@ -184,6 +188,15 @@ uint8_t DtaOptions(int argc, char * argv[], DTA_OPTIONS * opts)
 			baseOptions += 1;
 			opts->output_format = sedutilNormal;
 			outputFormat = sedutilNormal;
+		}
+		else if (!strcmp("-j", argv[i])) {
+			baseOptions += 1;
+			opts->output_format = sedutilJSON;
+			outputFormat = sedutilJSON;
+		}
+		else if (!strcmp("-S", argv[i])) {
+			baseOptions += 1;
+			opts->password_stdin = true;
 		}
 		else if (!(('-' == argv[i][0]) && ('-' == argv[i][1])) && 
 			(0 == opts->action))
@@ -658,5 +671,10 @@ uint8_t DtaOptions(int argc, char * argv[], DTA_OPTIONS * opts)
 			return DTAERROR_INVALID_COMMAND;
         }
     }
+	if (0 == opts->action) {
+		// only flags such as -v or -j: there is nothing to do
+		LOG(E) << "No command given, see --help";
+		return DTAERROR_INVALID_COMMAND;
+	}
     return 0;
 }

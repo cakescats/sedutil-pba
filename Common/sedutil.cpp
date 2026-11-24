@@ -29,6 +29,8 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #include "DtaDevOpal1.h"
 #include "DtaDevOpal2.h"
 #include "DtaDevEnterprise.h"
+#include "DtaCli.h"
+#include "DtaJson.h"
 
 using namespace std;
 
@@ -39,7 +41,11 @@ int isValidSEDDisk(char *devname)
 {
 	DtaDev * d;
 	d = new DtaDevGeneric(devname);
-	if (d->isPresent()) {
+	if (DtaJson::enabled()) {
+		if (d->isPresent()) DtaJson::set("device", DtaJson::deviceInfo(d, devname));
+		else DtaJson::set("device", DtaJson::Obj().str("path", devname).b("present", false).done());
+	}
+	else if (d->isPresent()) {
 		printf("%s", devname);
 		if (d->isAnySSC())
 			printf(" SED %s%s%s ", (d->isOpal1() ? "1" : "-"),
@@ -53,19 +59,9 @@ int isValidSEDDisk(char *devname)
 	return 0;
 }
 
-int main(int argc, char * argv[])
+static int run(int argc, char * argv[], DTA_OPTIONS &opts)
 {
-	DTA_OPTIONS opts;
 	DtaDev *tempDev = NULL, *d = NULL;
-#ifndef _WIN32
-	// "sedutil-cli ... | head" would otherwise kill us with a session still
-	// open, and the drive refuses new ones until it times out
-	signal(SIGPIPE, SIG_IGN);
-#endif
-	if (DtaOptions(argc, argv, &opts)) {
-		return DTAERROR_COMMAND_ERROR;
-	}
-	
 	if ((opts.action != sedutiloption::scan) && 
 		(opts.action != sedutiloption::validatePBKDF2) &&
 		(opts.action != sedutiloption::isValidSED)) {
@@ -227,11 +223,13 @@ int main(int argc, char * argv[])
 		break;
     case sedutiloption::query:
 		LOG(D) << "Performing diskquery() on " << argv[opts.device];
-        d->puke();
+		if (DtaJson::enabled()) DtaJson::set("device", DtaJson::deviceInfo(d, argv[opts.device]));
+		else d->puke();
         return 0;
         break;
 	case sedutiloption::scan:
         LOG(D) << "Performing diskScan() ";
+		if (DtaJson::enabled()) return DtaJson::scan(DtaDevOS::deviceNames());
         return(DtaDevOS::diskScan());
         break;
 	case sedutiloption::isValidSED:
@@ -269,11 +267,11 @@ int main(int argc, char * argv[])
         return TestPBKDF2();
 	case sedutiloption::yesIreallywanttoERASEALLmydatausingthePSID:
 	case sedutiloption::PSIDrevert:
-		LOG(D) << "Performing a PSID Revert on " << argv[opts.device] << " with password " << argv[opts.password];
+		LOG(D) << "Performing a PSID Revert on " << argv[opts.device];
         return d->revertTPer(argv[opts.password], 1, 0);
         break;
 	case sedutiloption::PSIDrevertAdminSP:
-		LOG(D) << "Performing a PSID RevertAdminSP on " << argv[opts.device] << " with password " << argv[opts.password];
+		LOG(D) << "Performing a PSID RevertAdminSP on " << argv[opts.device];
         return d->revertTPer(argv[opts.password], 1, 1);
         break;
 	case sedutiloption::eraseLockingRange:
@@ -294,8 +292,11 @@ int main(int argc, char * argv[])
 		vector<uint8_t> hash;
 		DtaHashPwd(hash, argv[opts.password], d);
 		// skip the 2 byte token header
-		for (size_t i = 2; i < hash.size(); i++) printf("%02x", hash[i]);
-		printf("\n");
+		std::string hex;
+		char b[3];
+		for (size_t i = 2; i < hash.size(); i++) { snprintf(b, sizeof(b), "%02x", hash[i]); hex += b; }
+		if (DtaJson::enabled()) DtaJson::set("hash", DtaJson::quote(hex));
+		else printf("%s\n", hex.c_str());
 		return 0;
 	}
 	case sedutiloption::rawCmd:
@@ -307,4 +308,32 @@ int main(int argc, char * argv[])
         usage();
     }
 	return DTAERROR_INVALID_COMMAND;
+}
+
+int main(int argc, char * argv[])
+{
+	DTA_OPTIONS opts;
+#ifndef _WIN32
+	// "sedutil-cli ... | head" would otherwise kill us with a session still
+	// open, and the drive refuses new ones until it times out
+	signal(SIGPIPE, SIG_IGN);
+#endif
+	// -j must take effect before anything is printed, errors in the
+	// arguments included. Global flags all come before the --command.
+	FILE *jsonOut = NULL;
+	for (int i = 1; i < argc && strncmp(argv[i], "--", 2); i++) {
+		if (!strcmp(argv[i], "-j") && !jsonOut) {
+			DtaJson::enable();
+			jsonOut = DtaDetachStdout();
+		}
+	}
+	int rc = DtaOptions(argc, argv, &opts) ? DTAERROR_COMMAND_ERROR : 0;
+	if (!rc && opts.password_stdin) rc = DtaReadStdinPasswords(argv, &opts);
+	if (!rc) rc = run(argc, argv, opts);
+	DtaWipeStdinPasswords();
+	if (jsonOut) {
+		fprintf(jsonOut, "%s\n", DtaJson::result(rc).c_str());
+		fflush(jsonOut);
+	}
+	return rc;
 }

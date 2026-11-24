@@ -42,9 +42,16 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 #include "DtaOptions.h"
 
 inline std::string NowTime();
+
+/** Every LOG(E) line, without the newline: sedutil-cli -j reports them */
+inline std::vector<std::string>& DtaLoggedErrors() {
+    static std::vector<std::string> errors;
+    return errors;
+}
 
 enum TLogLevel {
     E, W, I, D, D1, D2, D3, D4
@@ -180,8 +187,21 @@ std::ostringstream& RLog<T>::Get(TLogLevel level, sedutiloutput output_format) {
 
 template <typename T>
 RLog<T>::~RLog() {
+	if (curlevel == E) {
+		std::string line = os.str();
+		// sedutilNormal puts "- <time> ERR : " in front
+		if (outputformat == sedutilNormal) {
+			size_t p = line.find(": ");
+			if (p != std::string::npos) line = line.substr(p + 2);
+		}
+		while (!line.empty() && (line.back() == ' ' || line.back() == '\n')) line.pop_back();
+		// the PBA runs for long and only needs the latest ones
+		if (DtaLoggedErrors().size() >= 50) DtaLoggedErrors().erase(DtaLoggedErrors().begin());
+		DtaLoggedErrors().push_back(line);
+	}
     os << std::endl;
-	if ((curlevel == I) && (outputformat != sedutilNormal))
+	// with -j stdout carries only the JSON result, so INFO goes to stderr too
+	if ((curlevel == I) && (outputformat == sedutilReadable))
 		T::Output(os.str());
 	else
 		T::OutputErr(os.str());

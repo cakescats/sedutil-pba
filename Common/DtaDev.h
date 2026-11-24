@@ -66,6 +66,8 @@ public:
 	DTA_DEVICE_TYPE getDevType();
 	/** displays the information returned by the Discovery 0 reply */
 	virtual void puke();
+	/** identify and Discovery 0 data, for sedutil-cli -j */
+	const OPAL_DiskInfo &diskInfo() const { return disk_info; }
 
 	/** Decode the Discovery 0 response. Scans the D0 response and creates a structure
 	 * that can be queried later as required.This code also takes care of

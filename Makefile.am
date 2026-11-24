@@ -19,6 +19,7 @@ SEDUTIL_COMMON_CODE = Common/log.h \
 	Common/DtaHexDump.h Common/DtaResponse.h \
 	Common/DtaSession.cpp Common/pbkdf2/blockwise.c \
 	Common/DtaSession.h Common/pbkdf2/blockwise.h \
+	Common/DtaJson.cpp Common/DtaJson.h \
 	Common/pbkdf2/chash.c Common/pbkdf2/hmac.c \
 	Common/pbkdf2/chash.h Common/pbkdf2/hmac.h \
 	Common/pbkdf2/pbkdf2.c Common/pbkdf2/sha1.c \
@@ -33,7 +34,7 @@ SEDUTIL_LINUX_CODE = \
 	linux/DtaDevOS.cpp linux/DtaDevOS.h 
 sbin_PROGRAMS = sedutil-cli linuxpba
 sedutil_cli_SOURCES = Common/sedutil.cpp Common/DtaOptions.cpp \
-	Common/DtaOptions.h \
+	Common/DtaOptions.h Common/DtaCli.cpp Common/DtaCli.h \
 	$(SEDUTIL_LINUX_CODE) \
 	$(SEDUTIL_COMMON_CODE)
 CLEANFILES = linux/Version.h

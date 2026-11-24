@@ -34,6 +34,7 @@ along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 #define OPAL_LOCKONRESET_COLUMN 9
 #include "DtaDevOpal.h"
 #include "DtaHashPwd.h"
+#include "DtaJson.h"
 #include "DtaEndianFixup.h"
 #include "DtaStructures.h"
 #include "DtaCommand.h"
@@ -227,21 +228,58 @@ static vector<uint8_t> lockOnResetFrom(DtaResponse &response)
 	return types;
 }
 
-static std::string lockOnResetNames(const vector<uint8_t> &types)
+static std::string lockOnResetName(uint8_t t)
 {
 	static const char *names[] = { "PowerCycle", "HardwareReset", "HotPlug", "Programmatic" };
+	return (t < 4) ? names[t] : std::to_string(t);
+}
+
+static std::string lockOnResetNames(const vector<uint8_t> &types)
+{
 	std::string out;
 	for (uint8_t t : types) {
 		if (!out.empty()) out += ",";
-		out += (t < 4) ? names[t] : std::to_string(t);
+		out += lockOnResetName(t);
 	}
 	return out.empty() ? "none" : out;
+}
+
+/* listLockingRanges with -j: the same data as the text listing */
+static uint8_t jsonLockingRanges(const vector<DtaDevOpal::lrStatus_t> &ranges, int16_t rangeid)
+{
+	DtaJson::Arr out;
+	bool found = false;
+	for (auto &lr : ranges) {
+		if (rangeid >= 0 && lr.lockingrange_num != rangeid) continue;
+		found = true;
+		DtaJson::Arr lor;
+		for (uint8_t t : lr.lockOnReset) lor.str(lockOnResetName(t));
+		DtaJson::Obj o;
+		o.u("range", lr.lockingrange_num).u("start", lr.start).u("length", lr.size)
+			.b("readLockEnabled", lr.RLKEna).b("writeLockEnabled", lr.WLKEna)
+			.b("readLocked", lr.RLocked).b("writeLocked", lr.WLocked)
+			.raw("lockOnReset", lor.done())
+			.b("ownPassword", lr.userEnabled);
+		if (lr.userEnabled) o.u("tryLimit", lr.tryLimit).u("tries", lr.tries);
+		out.add(o.done());
+	}
+	if (!found) {
+		LOG(E) << "No locking range " << rangeid;
+		return DTAERROR_UNSUPORTED_LOCKING_RANGE;
+	}
+	DtaJson::set("ranges", out.done());
+	return 0;
 }
 
 uint8_t DtaDevOpal::listLockingRanges(char * password, int16_t rangeid)
 {
 	uint8_t lastRC;
 	LOG(D1) << "Entering DtaDevOpal:listLockingRanges()" << rangeid;
+	if (DtaJson::enabled()) {
+		vector<lrStatus_t> ranges;
+		if ((lastRC = getLockingRanges(password, ranges)) != 0) return lastRC;
+		return jsonLockingRanges(ranges, rangeid);
+	}
 	vector<uint8_t> LR;
 	LR.push_back(OPAL_SHORT_ATOM::BYTESTRING8);
 	for (int i = 0; i < 8; i++) {
@@ -1685,6 +1723,7 @@ uint8_t DtaDevOpal::loadPBA(char * password, char * filename) {
 	uint32_t blockSize;
 	uint32_t filepos = 0;
 	uint32_t eofpos;
+	uint16_t lastPercent = 0xffff;
 	ifstream pbafile;
 	(MAX_BUFFER_LENGTH > tperMaxPacket) ? blockSize = tperMaxPacket : blockSize = MAX_BUFFER_LENGTH;
 	if (blockSize > (tperMaxToken - 4)) blockSize = tperMaxToken - 4;
@@ -1751,9 +1790,19 @@ uint8_t DtaDevOpal::loadPBA(char * password, char * filename) {
 			return lastRC;
 		}
 		filepos += blockSize;
-		cout << filepos << " of " << eofpos << " " << (uint16_t) (((float)filepos/(float)eofpos) * 100) << "% blk=" << blockSize << " \r";
+		const uint16_t percent = (uint16_t) (((float)filepos/(float)eofpos) * 100);
+		if (DtaJson::enabled()) {
+			// one line per percent on stderr for a GUI's progress bar
+			if (percent != lastPercent) {
+				fprintf(stderr, "{\"progress\":{\"done\":%lu,\"total\":%lu,\"percent\":%u}}\n",
+					(unsigned long)filepos, (unsigned long)eofpos, (unsigned)percent);
+				fflush(stderr);
+			}
+		}
+		else cout << filepos << " of " << eofpos << " " << percent << "% blk=" << blockSize << " \r";
+		lastPercent = percent;
 	}
-	cout << "\n";
+	if (!DtaJson::enabled()) cout << "\n";
 	delete cmd;
 	delete session;
 	pbafile.close();
@@ -2000,7 +2049,8 @@ uint8_t DtaDevOpal::printDefaultPassword()
 		return rc;
 	}
 	string defaultPassword = response.getString(4);
-    fprintf(stdout, "MSID: %s\n", (char *)defaultPassword.c_str());
+	if (DtaJson::enabled()) DtaJson::set("msid", DtaJson::quote(defaultPassword));
+	else fprintf(stdout, "MSID: %s\n", (char *)defaultPassword.c_str());
     return 0;
 }
 uint8_t DtaDevOpal::setSIDPassword(char * oldpassword, char * newpassword,
@@ -2133,7 +2183,7 @@ uint8_t DtaDevOpal::stackReset()
 	buf[7] = 0x02;
 	if ((lastRC = sendCmd(IF_SEND, 0x02, id, buf, 512)) != 0) {
 		LOG(E) << "STACK_RESET send failed " << (uint16_t)lastRC;
-		return lastRC;
+		return DTAERROR_IO;
 	}
 	// the response says "pending" until the reset is done
 	for (int i = 0; i < 100; i++) {
@@ -2141,7 +2191,7 @@ uint8_t DtaDevOpal::stackReset()
 		memset(buf, 0, MIN_BUFFER_LENGTH);
 		if ((lastRC = sendCmd(IF_RECV, 0x02, id, buf, 512)) != 0) {
 			LOG(E) << "STACK_RESET receive failed " << (uint16_t)lastRC;
-			return lastRC;
+			return DTAERROR_IO;
 		}
 		uint16_t avail = (uint16_t)((buf[10] << 8) | buf[11]);
 		if (avail < 4) continue;
@@ -2164,7 +2214,7 @@ uint8_t DtaDevOpal::exec(DtaCommand * cmd, DtaResponse & resp, uint8_t protocol)
     IFLOG(D3) DtaHexDump(cmd->getCmdBuffer(), SWAP32(hdr->cp.length) + sizeof (OPALComPacket));
     if((lastRC = sendCmd(IF_SEND, protocol, comID(), cmd->getCmdBuffer(), cmd->outputBufferSize())) != 0) {
 		LOG(E) << "Command failed on send " << (uint16_t) lastRC;
-        return lastRC;
+        return DTAERROR_IO;
     }
     hdr = (OPALHeader *) cmd->getRespBuffer();
     do {
@@ -2178,7 +2228,7 @@ uint8_t DtaDevOpal::exec(DtaCommand * cmd, DtaResponse & resp, uint8_t protocol)
     IFLOG(D3) DtaHexDump(cmd->getRespBuffer(), SWAP32(hdr->cp.length) + sizeof (OPALComPacket));
 	if (0 != lastRC) {
         LOG(E) << "Command failed on recv, returned " << (uint16_t) lastRC;
-        return lastRC;
+        return DTAERROR_IO;
     }
     resp.init(cmd->getRespBuffer());
     return 0;

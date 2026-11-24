@@ -4,7 +4,7 @@
 sedutil-cli \- util to manage TCG Opal 2.0 self encrypting drives
 
 .SH SYNOPSIS
-sedutil\-cli <\-v> <\-n> <action> <options> <device>
+sedutil\-cli <\-v> <\-n> <\-j> <\-S> <action> <options> <device>
 
 .SH DESCRIPTION
 sedutil-cli is a utility to manage self encrypting drives that conform
@@ -22,6 +22,13 @@ contents of /sys/module/libata/parameters/allow_tpm to a from a
 increase verbosity, one to five v's
 .IP "\-n (optional)"
 no password hashing. Passwords will be sent in clear text!
+.IP "\-j (optional)"
+print exactly one JSON object with the result to stdout; log lines and
+progress go to stderr. The format is in docs/json.md.
+.IP "\-S (optional)"
+read every password argument given as \- from stdin, one line each, in the
+order of the arguments. On a terminal the password is asked with echo off,
+a new one twice. Keeps passwords out of the process list.
 
 .SS Actions
 .IP \-\-scan

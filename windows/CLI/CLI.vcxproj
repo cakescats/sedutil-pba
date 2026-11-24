@@ -35,6 +35,8 @@
     <ClInclude Include="..\..\Common\DtaLexicon.h" />
     <ClInclude Include="..\..\Common\DtaResponse.h" />
     <ClInclude Include="..\..\Common\DtaSession.h" />
+    <ClInclude Include="..\..\Common\DtaCli.h" />
+    <ClInclude Include="..\..\Common\DtaJson.h" />
     <ClInclude Include="..\..\Common\DtaStructures.h" />
     <ClInclude Include="..\..\common\log.h" />
     <ClInclude Include="..\..\Common\pbkdf2\bitops.h" />
@@ -67,6 +69,8 @@
     <ClCompile Include="..\..\Common\DtaOptions.cpp" />
     <ClCompile Include="..\..\Common\DtaResponse.cpp" />
     <ClCompile Include="..\..\Common\DtaSession.cpp" />
+    <ClCompile Include="..\..\Common\DtaCli.cpp" />
+    <ClCompile Include="..\..\Common\DtaJson.cpp" />
     <ClCompile Include="..\..\Common\pbkdf2\blockwise.c" />
     <ClCompile Include="..\..\Common\pbkdf2\chash.c" />
     <ClCompile Include="..\..\Common\pbkdf2\hmac.c" />

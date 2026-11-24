@@ -72,6 +72,12 @@
     <ClInclude Include="..\..\Common\DtaSession.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Common\DtaCli.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Common\DtaJson.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Common\DtaStructures.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -120,6 +126,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Common\DtaSession.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\DtaCli.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\DtaJson.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Common\DtaResponse.cpp">

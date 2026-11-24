@@ -203,6 +203,7 @@ windows/installer/exe
 /qemu-smoke/
 tests/host/test_host
 tests/host/test_host.log
+tests/host/sedutil-cli-fake
 tests/host/Version.h
 tests/host/*.o
 __pycache__/

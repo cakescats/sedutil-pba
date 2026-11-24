@@ -121,16 +121,12 @@ void DtaDevOS::osmsSleep(uint32_t ms)
 	usleep(ms * 1000); //convert to microseconds
     return;
 }
-int  DtaDevOS::diskScan()
+std::vector<std::string> DtaDevOS::deviceNames()
 {
     DIR *dir;
     struct dirent *dirent;
-    DtaDev * d;
-    char devname[25];
     vector<string> devices;
-    string tempstring;
-    
-    LOG(D1) << "Entering DtaDevOS:diskScan ";
+
     dir = opendir("/dev");
     if(dir!=NULL)
     {
@@ -139,16 +135,24 @@ int  DtaDevOS::diskScan()
                     (!fnmatch("nvme[0-9]",dirent->d_name,0)) ||
                     (!fnmatch("nvme[0-9][0-9]",dirent->d_name,0))
                     ) {
-                tempstring = dirent->d_name;
-                devices.push_back(tempstring);
+                devices.push_back(string("/dev/") + dirent->d_name);
             }
         }
         closedir(dir);
     }
     std::sort(devices.begin(),devices.end());
+    return devices;
+}
+
+int  DtaDevOS::diskScan()
+{
+    DtaDev * d;
+    
+    LOG(D1) << "Entering DtaDevOS:diskScan ";
+    vector<string> devices = deviceNames();
     printf("Scanning for Opal compliant disks\n");
     for(uint16_t i = 0; i < devices.size(); i++) {
-                snprintf(devname,23,"/dev/%s",devices[i].c_str());
+                const char *devname = devices[i].c_str();
                 printf("%-10s", devname);
                 d = new DtaDevGeneric(devname);
 		if (d->isAnySSC())

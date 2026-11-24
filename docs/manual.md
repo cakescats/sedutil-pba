@@ -113,6 +113,14 @@ Tips:
   `sedutil-cli` command and set `hash = sha512` in the image (section 8).
 - More drives are set up the same way, each with its own password if you
   like. The PBA only needs to be on the drive the firmware boots from.
+- To keep a password out of the shell history and the process list, put
+  `-S` before the command and `-` in place of the password:
+  `sudo sedutil-cli -S --initialSetup - /dev/nvme0` then asks for it twice
+  with echo off. Scripts and GUIs can also use `-j` for JSON output, see
+  [json.md](json.md).
+- A password with special characters (`@ $ % ^ ! " '`) is safe only through
+  `-S`: as an argument the shell changes it first, PowerShell drops an
+  argument that starts with `@`, and the drive then gets another password.
 
 ## 5. Day to day
 
