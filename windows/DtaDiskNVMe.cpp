@@ -129,6 +129,80 @@ uint8_t DtaDiskNVMe::sendCmd(ATACOMMAND cmd, uint8_t protocol, uint16_t comID,
 	return 1;
 }
 
+/* NVMe Identify Controller through the storage protocol query of Windows 10
+ * (stornvme). The SCSI translation that sendCmd goes through gives a 16 byte
+ * model and no serial number at all, and the serial number is the salt of the
+ * password hash (DtaHashPwd): it has to be the bytes Linux and the PBA read,
+ * or every password set elsewhere is refused as NOT_AUTHORIZED. */
+namespace {
+/* winioctl.h layouts (Windows 10), spelled out so the SDK version does not matter */
+struct ProtocolSpecificData {
+	DWORD ProtocolType;
+	DWORD DataType;
+	DWORD ProtocolDataRequestValue;
+	DWORD ProtocolDataRequestSubValue;
+	DWORD ProtocolDataOffset;
+	DWORD ProtocolDataLength;
+	DWORD FixedProtocolReturnData;
+	DWORD ProtocolDataRequestSubValue2;
+	DWORD ProtocolDataRequestSubValue3;
+	DWORD ProtocolDataRequestSubValue4;
+};
+/* STORAGE_PROPERTY_QUERY with the data as AdditionalParameters */
+struct ProtocolQuery {
+	DWORD PropertyId;
+	DWORD QueryType;
+	ProtocolSpecificData data;
+};
+/* STORAGE_PROTOCOL_DATA_DESCRIPTOR */
+struct ProtocolDescriptor {
+	DWORD Version;
+	DWORD Size;
+	ProtocolSpecificData data;
+};
+const DWORD StorageAdapterProtocolSpecific = 49;
+const DWORD StorageDeviceProtocolSpecific = 50;
+const DWORD ProtocolNvme = 3;
+const DWORD NVMeIdentify = 1;
+const DWORD CnsController = 1;
+const DWORD IdentifySize = 4096;
+/* the fields DtaDevLinuxNvme::identify copies end here (firmware at 64..71) */
+const DWORD IdentifyUsed = 72;
+}
+
+static bool nvmeIdentifyController(HANDLE hDev, vector<uint8_t> &ctrl)
+{
+	const DWORD properties[] = { StorageAdapterProtocolSpecific, StorageDeviceProtocolSpecific };
+	for (DWORD property : properties) {
+		vector<uint8_t> buf(sizeof(ProtocolQuery) + IdentifySize, 0);
+		ProtocolQuery *q = (ProtocolQuery *)buf.data();
+		q->PropertyId = property;
+		q->QueryType = 0; // PropertyStandardQuery
+		q->data.ProtocolType = ProtocolNvme;
+		q->data.DataType = NVMeIdentify;
+		q->data.ProtocolDataRequestValue = CnsController;
+		q->data.ProtocolDataOffset = sizeof(ProtocolSpecificData);
+		q->data.ProtocolDataLength = IdentifySize;
+		DWORD returned = 0;
+		if (!DeviceIoControl(hDev, IOCTL_STORAGE_QUERY_PROPERTY, buf.data(), (DWORD)buf.size(),
+				buf.data(), (DWORD)buf.size(), &returned, NULL)) {
+			LOG(D1) << "NVMe Identify through property " << property << " failed, error " << GetLastError();
+			continue;
+		}
+		const ProtocolDescriptor *d = (const ProtocolDescriptor *)buf.data();
+		const size_t start = sizeof(d->Version) + sizeof(d->Size) + d->data.ProtocolDataOffset;
+		if ((d->Version != sizeof(ProtocolDescriptor)) || (d->Size != sizeof(ProtocolDescriptor)) ||
+				(d->data.ProtocolDataOffset < sizeof(ProtocolSpecificData)) ||
+				(d->data.ProtocolDataLength < IdentifyUsed) || (start + IdentifyUsed > buf.size())) {
+			LOG(D1) << "NVMe Identify through property " << property << ": unexpected answer";
+			continue;
+		}
+		ctrl.assign(buf.begin() + start, buf.begin() + start + IdentifyUsed);
+		return true;
+	}
+	return false;
+}
+
 /** adds the IDENTIFY information to the disk_info structure */
 
 void DtaDiskNVMe::identify(OPAL_DiskInfo& disk_info)
@@ -151,10 +225,19 @@ void DtaDiskNVMe::identify(OPAL_DiskInfo& disk_info)
 		return;
 	}
 	SCSI_INQUIRY_RESPONSE * id = (SCSI_INQUIRY_RESPONSE *)identifyResp;
-	//memcpy(disk_info.serialNum, id->ProductSerial, sizeof(disk_info.serialNum));
 	memcpy(disk_info.firmwareRev, id->ProductRev, sizeof(id->ProductRev));
 	memcpy(disk_info.modelNum, id->ProductID, sizeof(id->ProductID));
 	_aligned_free(identifyResp);
+	vector<uint8_t> ctrl;
+	if (nvmeIdentifyController(hDev, ctrl)) {
+		// the same bytes as linux/DtaDevLinuxNvme.cpp: serial 4..23, model 24..63, firmware 64..71
+		memcpy(disk_info.serialNum, ctrl.data() + 4, sizeof(disk_info.serialNum));
+		memcpy(disk_info.modelNum, ctrl.data() + 24, sizeof(disk_info.modelNum));
+		memcpy(disk_info.firmwareRev, ctrl.data() + 64, sizeof(disk_info.firmwareRev));
+	}
+	else {
+		LOG(W) << "Cannot read the NVMe serial number: passwords set on another system or in the PBA will not match";
+	}
 	return;
 }
 

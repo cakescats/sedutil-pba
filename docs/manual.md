@@ -118,6 +118,9 @@ Tips:
   `sudo sedutil-cli -S --initialSetup - /dev/nvme0` then asks for it twice
   with echo off. Scripts and GUIs can also use `-j` for JSON output, see
   [json.md](json.md).
+- A password with special characters (`@ $ % ^ ! " '`) is safe only through
+  `-S`: as an argument the shell changes it first, PowerShell drops an
+  argument that starts with `@`, and the drive then gets another password.
 
 ## 5. Day to day
 

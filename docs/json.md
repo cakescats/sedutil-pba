@@ -162,6 +162,26 @@ bytes must reach the drive every time:
 
 ASCII passwords avoid the question.
 
+Special characters are safe through `-S`: the line goes to the drive as
+typed. As an argument the shell gets them first, and a password it has
+changed is a different password:
+
+| Shell | Changes | Safe as an argument |
+|---|---|---|
+| PowerShell | `@` at the start (splatting: the argument disappears), `$`, `` ` ``, `"` | in single quotes: `'@my$pass'` (a `'` inside is written `''`) |
+| cmd.exe | `%`, `^`, `!`, `&`, `\|`, `<`, `>`, `"` | hardly; use `-S` |
+| bash, zsh | `$`, `` ` ``, `\`, `!`, `"`, `'` | in single quotes |
+
+So for passwords with special characters `-S` is the way on every system.
+
+Windows and NVMe drives: up to the `gui-msi` changes, sedutil-cli on
+Windows read no serial number from NVMe drives and hashed every password
+with an empty salt, so a password set in Linux or the PBA was refused as
+`NOT_AUTHORIZED`. It now reads the NVMe Identify data the way Linux does.
+A password that was set on an NVMe drive by an older sedutil-cli on Windows
+was hashed with that empty salt and does not match now (nor did it in the
+PBA): change it with the older version first.
+
 Examples:
 
 ```powershell
